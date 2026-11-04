@@ -21,6 +21,8 @@ All paths below are relative to the repository root. `scripts/` means `plugins/.
 
    Loading the runner image saves a 600 MB pull per node restart: `kind load docker-image ghcr.io/alaborderie/cloud-agent-runner:sha-de01b1b --name cloud-agents`. If `kind load` fails with "disk quota exceeded", set `TMPDIR` to a directory under `$HOME`.
 
+For RBAC verification, follow the README's [restricted Role setup](../../../../README.md#verify-with-the-restricted-role) before starting the backend. Use the generated ServiceAccount `KUBECONFIG` for both the initial backend and the e2e shell, then run `VERIFY_KUBE_RBAC=1 scripts/e2e.sh …`. This checks every required verb and rejects administrator access. Use a separate administrator shell for setup and cleanup because the backend Role cannot list Jobs.
+
 2. Backend, from a shell that keeps these variables, because the restart check starts the backend again from that shell:
 
    ```sh

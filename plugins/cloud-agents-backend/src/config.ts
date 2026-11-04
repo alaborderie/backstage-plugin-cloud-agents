@@ -109,8 +109,8 @@ function readJob(config: Config): JobConfig {
     resources: {
       requests: Object.keys(requests).length
         ? requests
-        : { cpu: '500m', memory: '1Gi' },
-      limits: Object.keys(limits).length ? limits : { memory: '4Gi' },
+        : { cpu: '500m', memory: '512Mi' },
+      limits: Object.keys(limits).length ? limits : { cpu: '1', memory: '2Gi' },
     },
   };
 }

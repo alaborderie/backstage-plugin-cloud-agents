@@ -33,6 +33,8 @@ export interface Config {
     };
     /** How often a follower checks a pending pod, in ms. Default 2000. */
     pollIntervalMs?: number;
+    /** Maximum wait for a runner container to start, in ms. Default 120000. */
+    podStartTimeoutMs?: number;
     /** Settings for each agent's Kubernetes Job. */
     job?: {
       /** Default 14400 (4 hours). */
@@ -42,8 +44,11 @@ export interface Config {
       serviceAccountName?: string;
       imagePullSecrets?: string[];
       nodeSelector?: { [key: string]: string };
+      /** Must be admitted by the namespace LimitRange and ResourceQuota. */
       resources?: {
+        /** Defaults to cpu 500m, memory 512Mi. A configured map replaces it. */
         requests?: { cpu?: string; memory?: string };
+        /** Defaults to cpu 1, memory 2Gi. A configured map replaces it. */
         limits?: { cpu?: string; memory?: string };
       };
     };

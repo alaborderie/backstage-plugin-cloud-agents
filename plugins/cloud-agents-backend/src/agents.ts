@@ -18,7 +18,7 @@ import {
 } from '@alaborderie/plugin-cloud-agents-common';
 import type { CredentialService, RunCredentials } from './credentials';
 import { jobNameFor } from './jobSpec';
-import type { Cluster } from './kube';
+import { KubernetesRefusal, type Cluster } from './kube';
 import { messageSection, replySection, runPrompt } from './prompt';
 import {
   nowIso,
@@ -583,7 +583,17 @@ export class AgentService {
       await this.store.updateAgent(this.store.knex, id, {
         stop_requested: true,
       });
-      await this.cluster.deleteJob(run.job_name);
+      try {
+        await this.cluster.deleteJob(run.job_name);
+      } catch (error) {
+        if (!(error instanceof KubernetesRefusal)) throw error;
+        await this.finishRun(run.id, {
+          status: 'failed',
+          exitCode: null,
+          prUrl: null,
+          error: error.message,
+        });
+      }
       return;
     }
     await this.mutate(id, async m => {

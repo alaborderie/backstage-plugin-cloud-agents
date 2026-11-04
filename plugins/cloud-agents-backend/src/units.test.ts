@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ConfigReader } from '@backstage/config';
+import { loadYaml, type V1Role } from '@kubernetes/client-node';
 import { DEFAULT_TIERS } from '@alaborderie/plugin-cloud-agents-common';
 import { readCloudAgentsConfig } from './config';
 import { CredentialCipher } from './crypto';
@@ -102,6 +103,10 @@ describe('readCloudAgentsConfig', () => {
       runnerImage: 'img:1',
       githubApp: { clientId: 'id' },
     });
+    expect(cfg.job.resources).toEqual({
+      requests: { cpu: '500m', memory: '512Mi' },
+      limits: { cpu: '1', memory: '2Gi' },
+    });
     expect([...cfg.tiers.values()]).toEqual(DEFAULT_TIERS);
     expect(cfg.settingsPageUrl).toBe(
       'https://bs.example/cloud-agents/settings',
@@ -109,6 +114,29 @@ describe('readCloudAgentsConfig', () => {
     expect(cfg.githubCallbackUrl).toBe(
       'https://bs.example/api/cloud-agents/me/github/callback',
     );
+  });
+
+  it('keeps resource overrides and replaces each configured map', () => {
+    const cfg = readCloudAgentsConfig(
+      new ConfigReader({
+        ...base,
+        cloudAgents: {
+          runnerImage: 'img',
+          encryptionKey: key.toString('base64'),
+          job: {
+            resources: {
+              requests: { cpu: '250m', memory: '256Mi' },
+              limits: { memory: '1Gi' },
+            },
+          },
+        },
+      }),
+      {},
+    );
+    expect(cfg.job.resources).toEqual({
+      requests: { cpu: '250m', memory: '256Mi' },
+      limits: { memory: '1Gi' },
+    });
   });
 
   it('takes tiers from app-config and rejects a bad key or harness', () => {
@@ -211,5 +239,42 @@ describe('outcomeOfExitCode', () => {
       [0, 1, 3, 130, 137].map(c => outcomeOfExitCode(c, false).status),
     ).toEqual(['succeeded', 'failed', 'needs_input', 'stopped', 'failed']);
     expect(outcomeOfExitCode(1, true).status).toBe('stopped');
+  });
+});
+
+describe('documented Kubernetes permissions', () => {
+  it('grants exactly the operations used by the Kubernetes adapter', () => {
+    const readme = readFileSync(
+      resolve(__dirname, '../../../README.md'),
+      'utf8',
+    );
+    const requirements = readme.split('## Kubernetes requirements')[1]!;
+    const manifest = requirements.split('```yaml\n')[1]!.split('```')[0]!;
+    const role = loadYaml<V1Role>(manifest.split('\n---\n')[0]!);
+    const documented = role.rules!.flatMap(rule =>
+      rule.apiGroups!.flatMap(group =>
+        rule.resources!.flatMap(resource =>
+          rule.verbs.map(verb => `${group}/${resource}/${verb}`),
+        ),
+      ),
+    );
+    const source = readFileSync(resolve(__dirname, 'kube.ts'), 'utf8');
+    const permissions: Record<string, string> = {
+      createNamespacedJob: 'batch/jobs/create',
+      readNamespacedJob: 'batch/jobs/get',
+      patchNamespacedJob: 'batch/jobs/patch',
+      deleteNamespacedJob: 'batch/jobs/delete',
+      createNamespacedSecret: '/secrets/create',
+      listNamespacedPod: '/pods/list',
+      listNamespacedEvent: '/events/list',
+      log: '/pods/log/get',
+    };
+    const calls = [
+      ...source.matchAll(/this\.(?:batch|core|log)\.(\w+)\(/g),
+    ].map(match => match[1]!);
+    for (const call of calls) expect(permissions).toHaveProperty(call);
+    expect(documented.sort()).toEqual(
+      [...new Set(calls.map(call => permissions[call]))].sort(),
+    );
   });
 });
