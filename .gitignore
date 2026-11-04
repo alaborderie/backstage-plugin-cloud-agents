@@ -1,0 +1,10 @@
+node_modules/
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+dist/
+dist-types/
+coverage/
+*.local.yaml
+.sqlite/
+*.log
