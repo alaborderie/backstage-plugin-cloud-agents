@@ -73,6 +73,9 @@ const REFRESH_ON = new Set([
   'run.finished',
 ]);
 
+/** Events that change only the rail, not the timeline. */
+const HIDDEN = new Set(['usage', 'rate_limit', 'agent.status']);
+
 /** Within this distance of the bottom, new events keep the page following. */
 const FOLLOW_SLACK_PX = 260;
 
@@ -333,8 +336,12 @@ function Loaded(props: { agent: Agent; reload(): void }) {
   const logRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const prCardRef = useRef<HTMLDivElement>(null);
-  const following = useRef(true);
-  const seenCount = useRef(0);
+  const heightBefore = useRef<number | undefined>(undefined);
+  const seenSeq = useRef<number | undefined>(undefined);
+  /** Runs already over when the page opened; their success is history. */
+  const [finishedAtOpen] = useState(
+    () => new Set(agent.runs.filter(r => r.finishedAt).map(r => r.id)),
+  );
 
   const onEvent = useCallback(
     (envelope: AgentEventEnvelope) => {
@@ -369,33 +376,38 @@ function Loaded(props: { agent: Agent; reload(): void }) {
     const target: HTMLElement | Window =
       scroller === document.scrollingElement ? window : scroller;
     const onScroll = () => {
-      following.current = nearBottom(scroller);
-      if (following.current) setUnseen(0);
+      if (nearBottom(scroller)) setUnseen(0);
     };
     onScroll();
     target.addEventListener('scroll', onScroll, { passive: true });
     return () => target.removeEventListener('scroll', onScroll);
   }, []);
 
-  const liveItems = timeline.items.filter(
-    item => item.seq > stream.historySeq,
-  ).length;
+  const lastSeq = stream.events[stream.events.length - 1]?.seq ?? 0;
   useLayoutEffect(() => {
-    const added = liveItems - seenCount.current;
-    seenCount.current = liveItems;
-    if (added <= 0) return;
-    if (following.current) scrollToEnd();
-    else setUnseen(n => n + added);
-  }, [liveItems, scrollToEnd]);
+    const from = Math.max(seenSeq.current ?? 0, stream.historySeq);
+    seenSeq.current = lastSeq;
+    const scroller = scrollParent(logRef.current);
+    const before = heightBefore.current ?? scroller.scrollHeight;
+    heightBefore.current = scroller.scrollHeight;
+    if (lastSeq <= from) return;
+    const following =
+      scroller.scrollTop + scroller.clientHeight >= before - FOLLOW_SLACK_PX;
+    const added = stream.events.filter(
+      env => env.seq > from && !HIDDEN.has(env.event.type),
+    ).length;
+    if (following) scrollToEnd();
+    else if (added) setUnseen(n => n + added);
+  }, [lastSeq, stream.events, stream.historySeq, scrollToEnd]);
 
   useEffect(() => {
     const finished = [...stream.events]
       .reverse()
       .find(
         env =>
-          env.seq > stream.historySeq &&
           env.event.type === 'run.finished' &&
-          env.event.status === 'succeeded',
+          env.event.status === 'succeeded' &&
+          !finishedAtOpen.has(env.runId),
       );
     if (!finished || celebrated.has(agent.id)) return;
     celebrated.add(agent.id);
@@ -416,7 +428,7 @@ function Loaded(props: { agent: Agent; reload(): void }) {
     });
   }, [
     stream.events,
-    stream.historySeq,
+    finishedAtOpen,
     agent.id,
     agent.branch,
     celebrate,
