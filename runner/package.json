@@ -1,0 +1,25 @@
+{
+  "name": "cloud-agent-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs one coding agent headless and streams normalized JSONL events.",
+  "bin": { "cloud-agent": "bin/cloud-agent" },
+  "engines": { "node": ">=24" },
+  "packageManager": "pnpm@12.16.1",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --test test/*.test.ts",
+    "validate-events": "node scripts/validate-events.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "eslint": "10.14.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1"
+  }
+}

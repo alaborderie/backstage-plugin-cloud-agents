@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alaborderie/backstage-plugin-cloud-agents/blob/main/runner/schema/events.v1.schema.json",
+  "title": "cloud-agent event, version 1",
+  "description": "One line of the JSONL stream that `cloud-agent run` prints on stdout. See runner/EVENTS.md.",
+  "type": "object",
+  "required": ["v", "seq", "ts", "run_id", "type"],
+  "properties": {
+    "v": { "const": 1, "description": "Event format major version. A breaking change bumps it." },
+    "seq": { "type": "integer", "minimum": 0, "description": "Position in this run's stream, from 0, without gaps." },
+    "ts": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "type": {
+      "enum": [
+        "run.started",
+        "skills.ready",
+        "workspace.ready",
+        "session.started",
+        "assistant.message",
+        "tool.call",
+        "tool.result",
+        "question",
+        "usage",
+        "rate_limit",
+        "log",
+        "run.finished"
+      ]
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/run.started" },
+    { "$ref": "#/$defs/skills.ready" },
+    { "$ref": "#/$defs/workspace.ready" },
+    { "$ref": "#/$defs/session.started" },
+    { "$ref": "#/$defs/assistant.message" },
+    { "$ref": "#/$defs/tool.call" },
+    { "$ref": "#/$defs/tool.result" },
+    { "$ref": "#/$defs/question" },
+    { "$ref": "#/$defs/usage" },
+    { "$ref": "#/$defs/rate_limit" },
+    { "$ref": "#/$defs/log" },
+    { "$ref": "#/$defs/run.finished" }
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "harness": { "enum": ["claude", "codex", "opencode"] },
+    "nullableString": { "type": ["string", "null"] },
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "count": { "type": "integer", "minimum": 0 },
+    "usageFields": {
+      "type": "object",
+      "required": ["input_tokens", "output_tokens", "cached_input_tokens", "reasoning_tokens", "cost_usd"],
+      "properties": {
+        "input_tokens": { "$ref": "#/$defs/count", "description": "All input tokens, cached ones included." },
+        "output_tokens": { "$ref": "#/$defs/count" },
+        "cached_input_tokens": { "$ref": "#/$defs/count", "description": "The part of input_tokens read from the prompt cache." },
+        "reasoning_tokens": { "$ref": "#/$defs/count" },
+        "cost_usd": { "type": ["number", "null"], "minimum": 0, "description": "List-price cost reported by the harness, or null when it reports none." }
+      }
+    },
+    "run.started": {
+      "type": "object",
+      "required": ["type", "harness", "model", "effort", "repo", "base", "branch", "runner_version", "harness_version"],
+      "properties": {
+        "type": { "const": "run.started" },
+        "harness": { "$ref": "#/$defs/harness" },
+        "model": { "type": "string", "minLength": 1 },
+        "effort": { "type": "string", "minLength": 1 },
+        "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+        "base": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "minLength": 1 },
+        "runner_version": { "type": "string", "minLength": 1 },
+        "harness_version": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "skills.ready": {
+      "type": "object",
+      "required": ["type", "source", "commit"],
+      "properties": {
+        "type": { "const": "skills.ready" },
+        "source": { "type": "string", "description": "Where the shared skills came from." },
+        "commit": { "$ref": "#/$defs/sha", "description": "The skills commit installed for this run." }
+      }
+    },
+    "workspace.ready": {
+      "type": "object",
+      "required": ["type", "repo", "branch", "base", "head_sha", "branch_existed"],
+      "properties": {
+        "type": { "const": "workspace.ready" },
+        "repo": { "type": "string" },
+        "branch": { "type": "string" },
+        "base": { "type": "string" },
+        "head_sha": { "$ref": "#/$defs/sha" },
+        "branch_existed": { "type": "boolean", "description": "True when the branch already existed on the remote and was checked out instead of created from base." }
+      }
+    },
+    "session.started": {
+      "type": "object",
+      "required": ["type", "session_id", "model"],
+      "properties": {
+        "type": { "const": "session.started" },
+        "session_id": { "type": "string" },
+        "model": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "assistant.message": {
+      "type": "object",
+      "required": ["type", "text", "parent_call_id"],
+      "properties": {
+        "type": { "const": "assistant.message" },
+        "text": { "type": "string" },
+        "parent_call_id": { "$ref": "#/$defs/nullableString", "description": "The subagent tool call this message belongs to, or null for the main agent." }
+      }
+    },
+    "tool.call": {
+      "type": "object",
+      "required": ["type", "call_id", "name", "kind", "input", "parent_call_id"],
+      "properties": {
+        "type": { "const": "tool.call" },
+        "call_id": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "enum": ["shell", "read", "edit", "search", "web", "mcp", "task", "other"] },
+        "input": { "description": "The tool's input as the harness reported it, with strings over 4000 characters cut." },
+        "parent_call_id": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "tool.result": {
+      "type": "object",
+      "required": ["type", "call_id", "is_error", "output", "truncated", "parent_call_id"],
+      "properties": {
+        "type": { "const": "tool.result" },
+        "call_id": { "type": "string" },
+        "is_error": { "type": "boolean" },
+        "output": { "type": "string", "maxLength": 16000 },
+        "truncated": { "type": "boolean" },
+        "parent_call_id": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "question": {
+      "type": "object",
+      "required": ["type", "question_id", "question", "options", "blocking", "source"],
+      "properties": {
+        "type": { "const": "question" },
+        "question_id": { "type": "string" },
+        "question": { "type": "string" },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "description"],
+            "properties": { "label": { "type": "string" }, "description": { "$ref": "#/$defs/nullableString" } },
+            "additionalProperties": false
+          }
+        },
+        "blocking": { "type": "boolean", "description": "True when the agent stopped to wait for the answer. A blocking question makes the run end as needs_input." },
+        "source": { "enum": ["ask_user", "native"], "description": "ask_user: the runner's MCP tool. native: the harness's own question tool, which a headless run cancels." }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/usageFields" }],
+      "required": ["type"],
+      "properties": { "type": { "const": "usage" } }
+    },
+    "rate_limit": {
+      "type": "object",
+      "required": ["type", "status", "window", "resets_at", "utilization", "message"],
+      "properties": {
+        "type": { "const": "rate_limit" },
+        "status": { "enum": ["allowed", "warning", "limited"] },
+        "window": { "$ref": "#/$defs/nullableString", "description": "The limit window, such as five_hour or seven_day, when the harness names it." },
+        "resets_at": { "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+        "utilization": { "type": ["number", "null"], "minimum": 0 },
+        "message": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "log": {
+      "type": "object",
+      "required": ["type", "level", "source", "message"],
+      "properties": {
+        "type": { "const": "log" },
+        "level": { "enum": ["info", "warn", "error"] },
+        "source": { "enum": ["runner", "harness"] },
+        "message": { "type": "string" }
+      }
+    },
+    "run.finished": {
+      "type": "object",
+      "required": [
+        "type",
+        "status",
+        "exit_code",
+        "harness_exit_code",
+        "branch",
+        "head_sha",
+        "pushed",
+        "pr_url",
+        "open_questions",
+        "usage",
+        "duration_ms",
+        "error"
+      ],
+      "properties": {
+        "type": { "const": "run.finished" },
+        "status": { "enum": ["succeeded", "failed", "needs_input", "cancelled"] },
+        "exit_code": { "enum": [0, 1, 3, 130], "description": "The runner's process exit code: 0 succeeded, 1 failed, 3 needs_input, 130 cancelled." },
+        "harness_exit_code": { "type": ["integer", "null"] },
+        "branch": { "type": "string" },
+        "head_sha": { "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }] },
+        "pushed": { "type": "boolean", "description": "True when the remote branch points at head_sha." },
+        "pr_url": { "oneOf": [{ "type": "string", "format": "uri" }, { "type": "null" }], "description": "The newest pull request whose head is this branch, in any state." },
+        "open_questions": { "type": "array", "items": { "type": "string" }, "description": "question_id of each blocking question." },
+        "usage": { "type": "object", "allOf": [{ "$ref": "#/$defs/usageFields" }], "unevaluatedProperties": false, "description": "Sum of this run's usage events." },
+        "duration_ms": { "$ref": "#/$defs/count" },
+        "error": { "$ref": "#/$defs/nullableString" }
+      }
+    }
+  }
+}
