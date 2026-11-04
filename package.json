@@ -1,0 +1,38 @@
+{
+  "name": "root",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "22 || 24"
+  },
+  "scripts": {
+    "start:backend": "yarn workspace @alaborderie/plugin-cloud-agents-backend start",
+    "start:frontend": "yarn workspace @alaborderie/plugin-cloud-agents start",
+    "build": "backstage-cli repo build",
+    "tsc": "tsc",
+    "tsc:full": "tsc --skipLibCheck false --incremental false",
+    "clean": "backstage-cli repo clean",
+    "test": "backstage-cli repo test",
+    "lint": "backstage-cli repo lint",
+    "prettier:check": "prettier --check --ignore-path .gitignore plugins README.md"
+  },
+  "workspaces": [
+    "plugins/*"
+  ],
+  "devDependencies": {
+    "@backstage/cli": "^0.36.7",
+    "@backstage/cli-defaults": "^0.1.7",
+    "@jest/environment-jsdom-abstract": "^30.5.0",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.5.0",
+    "jsdom": "^27.1.0",
+    "prettier": "^2.3.2",
+    "typescript": "~5.8.0"
+  },
+  "resolutions": {
+    "@types/react": "^18",
+    "@types/react-dom": "^18"
+  },
+  "prettier": "@backstage/cli/config/prettier",
+  "packageManager": "yarn@4.13.0"
+}

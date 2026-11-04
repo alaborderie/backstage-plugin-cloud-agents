@@ -1,0 +1,43 @@
+{
+  "name": "@alaborderie/plugin-cloud-agents-common",
+  "version": "0.1.0",
+  "description": "Shared types for the cloud-agents Backstage plugin API, version 1.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alaborderie/backstage-plugin-cloud-agents",
+    "directory": "plugins/cloud-agents-common"
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.cjs.js",
+    "module": "dist/index.esm.js",
+    "types": "dist/index.d.ts"
+  },
+  "backstage": {
+    "role": "common-library",
+    "pluginId": "cloud-agents",
+    "pluginPackages": [
+      "@alaborderie/plugin-cloud-agents",
+      "@alaborderie/plugin-cloud-agents-backend",
+      "@alaborderie/plugin-cloud-agents-common"
+    ]
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "backstage-cli package build",
+    "lint": "backstage-cli package lint",
+    "test": "backstage-cli package test",
+    "clean": "backstage-cli package clean",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack"
+  },
+  "devDependencies": {
+    "@backstage/cli": "^0.36.7"
+  },
+  "files": [
+    "dist"
+  ]
+}

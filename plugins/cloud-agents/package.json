@@ -1,0 +1,71 @@
+{
+  "name": "@alaborderie/plugin-cloud-agents",
+  "version": "0.1.0",
+  "description": "Backstage frontend plugin to launch cloud coding agents, follow their events, and manage per-user credentials.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alaborderie/backstage-plugin-cloud-agents",
+    "directory": "plugins/cloud-agents"
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.esm.js",
+    "types": "dist/index.d.ts"
+  },
+  "backstage": {
+    "role": "frontend-plugin",
+    "pluginId": "cloud-agents",
+    "pluginPackages": [
+      "@alaborderie/plugin-cloud-agents",
+      "@alaborderie/plugin-cloud-agents-backend",
+      "@alaborderie/plugin-cloud-agents-common"
+    ]
+  },
+  "sideEffects": false,
+  "scripts": {
+    "start": "backstage-cli package start --config dev/app-config.yaml",
+    "build": "backstage-cli package build",
+    "lint": "backstage-cli package lint",
+    "test": "backstage-cli package test",
+    "clean": "backstage-cli package clean",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack"
+  },
+  "dependencies": {
+    "@alaborderie/plugin-cloud-agents-common": "workspace:^",
+    "@backstage/core-components": "^0.18.15",
+    "@backstage/core-plugin-api": "^1.12.11",
+    "@backstage/errors": "^1.3.2",
+    "@backstage/frontend-plugin-api": "^0.18.2",
+    "@material-ui/core": "^4.12.2",
+    "@material-ui/icons": "^4.9.1",
+    "@material-ui/lab": "4.0.0-alpha.61"
+  },
+  "peerDependencies": {
+    "react": "^16.13.1 || ^17.0.0 || ^18.0.0",
+    "react-dom": "^16.13.1 || ^17.0.0 || ^18.0.0",
+    "react-router-dom": "^6.3.0"
+  },
+  "devDependencies": {
+    "@backstage/cli": "^0.36.7",
+    "@backstage/frontend-defaults": "^0.5.7",
+    "@backstage/frontend-test-utils": "^0.6.5",
+    "@backstage/plugin-app-react": "^0.2.8",
+    "@backstage/test-utils": "^1.7.23",
+    "@testing-library/dom": "^9.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.0.0",
+    "react": "^18.0.2",
+    "react-dom": "^18.0.2",
+    "react-router-dom": "^6.30.2"
+  },
+  "files": [
+    "dist",
+    "config.d.ts"
+  ],
+  "configSchema": "config.d.ts"
+}
