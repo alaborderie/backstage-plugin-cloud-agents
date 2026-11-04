@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { openAskChannel } from './ask-channel.ts';
 import type { WriteStream } from 'node:fs';
 import { Emitter, EXIT_CODES, addUsage, emptyUsage } from './events.ts';
-import type { HarnessName, RunStatus, Sink } from './events.ts';
+import type { EventBody, HarnessName, RunStatus, Sink } from './events.ts';
 import { harnesses } from './harnesses/index.ts';
 import { questionEvents } from './harnesses/types.ts';
 import type { Harness, RunSpec } from './harnesses/types.ts';
@@ -12,8 +12,9 @@ import { baseEnv, runProc } from './proc.ts';
 import { collectSecrets, redactString } from './redact.ts';
 import { SKILLS_SOURCE, installSkills, installedSkillsCommit } from './skills.ts';
 import { runnerVersion } from './version.ts';
-import { branchState, configureGit, prepareWorkspace } from './workspace.ts';
-import type { WorkspaceSpec } from './workspace.ts';
+import { githubEnv, githubToken } from './github-token.ts';
+import { branchState, configureGit, prepareWorkspace, pushUnpushedWork } from './workspace.ts';
+import type { UnpushedWork, WorkspaceSpec } from './workspace.ts';
 
 export interface RunOptions {
   harness: HarnessName;
@@ -27,6 +28,18 @@ export interface RunOptions {
   runId: string;
   rawOut: string | null;
   installSkills: boolean;
+}
+
+function unpushedWorkLog(work: UnpushedWork): EventBody {
+  const commits = `${String(work.commits)} unpushed commit${work.commits === 1 ? '' : 's'} on ${work.branch}`;
+  switch (work.outcome) {
+    case 'pushed':
+      return { type: 'log', level: 'info', source: 'runner', message: `pushed ${commits}` };
+    case 'push_failed':
+      return { type: 'log', level: 'warn', source: 'runner', message: `could not push ${commits}: ${work.error}` };
+    case 'not_pushed':
+      return { type: 'log', level: 'warn', source: 'runner', message: `left ${commits}: ${work.reason}` };
+  }
 }
 
 export async function harnessVersion(harness: Harness, env: Record<string, string>): Promise<string | null> {
@@ -77,7 +90,7 @@ async function runHarness(
 }
 
 export async function run(opts: RunOptions, env: NodeJS.ProcessEnv, stdout: Sink, stderrRaw: Sink, signal: AbortSignal): Promise<number> {
-  const startedAt = Date.now();
+  const startedAt = new Date();
   const secrets = collectSecrets(env);
   const stderr: Sink = (line) => {
     stderrRaw(redactString(line, secrets));
@@ -85,7 +98,7 @@ export async function run(opts: RunOptions, env: NodeJS.ProcessEnv, stdout: Sink
   const emitter = new Emitter(opts.runId, secrets, stdout);
   const harness = harnesses[opts.harness];
   const plainEnv = baseEnv(env);
-  const gitEnv = { ...plainEnv, ...(env.GH_TOKEN ? { GH_TOKEN: env.GH_TOKEN } : {}) };
+  const gitEnv = { ...plainEnv, ...githubEnv(env) };
   const workspace: WorkspaceSpec = { repo: opts.repo, base: opts.base, branch: opts.branch, workdir: opts.workdir, env: gitEnv };
   const raw = opts.rawOut ? createWriteStream(opts.rawOut, { flags: 'a', mode: 0o600 }) : null;
 
@@ -134,8 +147,14 @@ export async function run(opts: RunOptions, env: NodeJS.ProcessEnv, stdout: Sink
   }
 
   const openQuestions = emitter.emitted.flatMap((e) => (e.type === 'question' && e.blocking ? [e.question_id] : []));
-  const state = await branchState(workspace);
   const status: RunStatus = signal.aborted ? 'cancelled' : error !== null ? 'failed' : openQuestions.length > 0 ? 'needs_input' : 'succeeded';
+  const token = await githubToken(env, stderr).catch(() => null);
+  const finishing: WorkspaceSpec = { ...workspace, env: { ...gitEnv, ...(token ? { GH_TOKEN: token } : {}) } };
+  if (status !== 'cancelled') {
+    const work = await pushUnpushedWork(finishing);
+    if (work) emitter.emit(unpushedWorkLog(work));
+  }
+  const state = await branchState(finishing, startedAt);
   const usage = emitter.emitted.reduce((total, e) => (e.type === 'usage' ? addUsage(total, e) : total), emptyUsage());
   emitter.emit({
     type: 'run.finished',
@@ -146,7 +165,7 @@ export async function run(opts: RunOptions, env: NodeJS.ProcessEnv, stdout: Sink
     ...state,
     open_questions: openQuestions,
     usage,
-    duration_ms: Date.now() - startedAt,
+    duration_ms: Date.now() - startedAt.getTime(),
     error: status === 'cancelled' ? (error ?? 'cancelled') : error,
   });
   if (raw) await new Promise<void>((resolve) => {

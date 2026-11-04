@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HARNESSES } from './events.ts';
+import { githubEnv } from './github-token.ts';
 import type { HarnessName, Sink } from './events.ts';
 import { harnesses } from './harnesses/index.ts';
 import { rec, str } from './json.ts';
@@ -89,7 +90,7 @@ async function prepareSkills(install: boolean, env: NodeJS.ProcessEnv, stderr: S
   const plain = baseEnv(env);
   if (!install) return { commit: await installedSkillsCommit(plain), error: null };
   if (!env.GH_TOKEN) return { commit: await installedSkillsCommit(plain), error: 'GH_TOKEN is not set, so the private skills repo was not fetched' };
-  const gitEnv = { ...plain, GH_TOKEN: env.GH_TOKEN };
+  const gitEnv = { ...plain, ...githubEnv(env) };
   try {
     await configureGit(gitEnv);
     return { commit: await installSkills(gitEnv, stderr), error: null };

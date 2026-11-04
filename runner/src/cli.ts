@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import { serveAsk } from './ask-mcp.ts';
 import { DEFAULT_SKILLS, doctor } from './doctor.ts';
 import { HARNESSES } from './events.ts';
+import { gitCredential, githubToken } from './github-token.ts';
 import type { HarnessName } from './events.ts';
 import { run } from './run.ts';
 import type { RunOptions } from './run.ts';
@@ -14,10 +15,15 @@ const USAGE = `Usage:
                   [--workdir <dir>] [--run-id <id>] [--raw-out <file>] [--skip-skills-install]
   cloud-agent doctor [--skill <name>]... [--skip-skills-install]
   cloud-agent mcp-ask [--socket <path>]
+  cloud-agent github-token
+  cloud-agent git-credential get|store|erase
   cloud-agent version
 
 run prints the event stream (EVENTS.md) on stdout and exits 0 succeeded, 1 failed,
-2 usage error, 3 needs_input, 130 cancelled.`;
+2 usage error, 3 needs_input, 130 cancelled.
+
+github-token prints the run's current GitHub token, from $CLOUD_AGENT_GH_TOKEN_URL
+when set, else $GH_TOKEN. git-credential is git's credential helper for github.com.`;
 
 class UsageError extends Error {}
 
@@ -66,6 +72,10 @@ function parseRun(argv: string[], env: NodeJS.ProcessEnv): RunOptions {
   };
 }
 
+function warn(message: string): void {
+  process.stderr.write(`cloud-agent: ${message}\n`);
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -98,6 +108,15 @@ async function main(argv: string[]): Promise<number> {
     case 'mcp-ask': {
       const { values } = parseArgs({ args: rest, options: { socket: { type: 'string' } }, strict: true });
       await serveAsk(values.socket ?? null);
+      return 0;
+    }
+    case 'github-token':
+      process.stdout.write(`${await githubToken(process.env, warn)}\n`);
+      return 0;
+    case 'git-credential': {
+      let input = '';
+      for await (const chunk of process.stdin) input += String(chunk);
+      process.stdout.write(await gitCredential(rest[0], input, process.env, warn));
       return 0;
     }
     case 'version':
