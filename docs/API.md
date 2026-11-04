@@ -127,3 +127,48 @@ with a ServiceAccount allowed to manage Jobs, Pods, Pods/log, and Secrets in
 - `PUT /me/credentials/github {"value": "<token>"}` stores a GitHub token directly (no refresh), for dev setups and Backstages without a GitHub App; `GET /me/credentials` then reports `github: {connected: true, login}`.
 - `DELETE /me/credentials/github` disconnects GitHub.
 The T3 bridge does not call these routes.
+
+## Additions approved by the hub
+
+These routes are additive. Clients of the contract above do not need them.
+
+- `PUT /me/credentials/github` `{"value": "<token>"}` stores a GitHub token
+  (a personal access token or a user token) for Backstages without a GitHub
+  App and for local development. The plugin checks it with `GET /user` and
+  answers `400` when GitHub rejects it. `GET /me/credentials` then reports
+  `{"connected": true, "login": "...", "method": "token"}`. The plugin never
+  refreshes such a token.
+- `DELETE /me/credentials/github` disconnects GitHub, whichever way it was
+  connected.
+
+## Implementation notes
+
+What the plugin does where the contract leaves room. Each item only adds a
+field or fixes a status code.
+
+- `GET /me/credentials` also returns `updatedAt` for each harness, and
+  `github.method` (`oauth` or `token`), `github.updatedAt`, and
+  `github.connectAvailable` (whether a GitHub App is configured).
+- `PUT` and `DELETE /me/credentials/...` answer `200` with the same object as
+  `GET /me/credentials`.
+- `422 missing_credential` also has `credential`: the harness name, or
+  `github` when the GitHub credential is missing or can no longer be
+  refreshed.
+- Plugin events carry `ts`. An `agent.status` of `failed` that the plugin
+  decided (the Job could not start, or the pod vanished without
+  `run.finished`) carries `error`.
+- The SSE stream starts with the comment `: connected`, then `: ping` every
+  15 s. Seqs start at 1, so `Last-Event-ID: 0` replays everything.
+- `POST /agents/:id/reply`, `/messages`, and `/stop` answer `202` with the
+  agent object. `/reply` answers `409` when the agent is not `needs_input` or
+  the question already has an answer, and `404` for an unknown question.
+  `/stop` on a terminal agent answers `202` and changes nothing.
+- `GET /me/github/connect` answers `302` to GitHub, or `200 {"url": "..."}`
+  when the request accepts `application/json` (the frontend uses that). The
+  GitHub App's callback URL is `<backstage>/api/cloud-agents/me/github/callback`.
+  The callback sends the browser to `<app>/cloud-agents/settings?github=connected`
+  (or `failed`, `denied`).
+- `POST /me/tokens` answers `201`; `DELETE /me/tokens/:id` answers `204`.
+  `GET /me/tokens` returns `[{"id", "name", "createdAt", "lastUsedAt"}]`.
+- Errors other than `422` use Backstage's error body:
+  `{"error": {"name", "message"}, "response": {"statusCode"}}`.
