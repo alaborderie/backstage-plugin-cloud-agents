@@ -178,7 +178,7 @@ export KUBECONFIG=/tmp/cloud-agents-sa.json
 
 The helper reads only the administrator's cluster connection and requests a one-hour token for `backstage/backstage`. It writes a new kubeconfig with only that token and file mode `0600`. It never changes your administrator kubeconfig. Run it again with a new output path when the token expires.
 
-Start the dev backend with this `KUBECONFIG` as described in [Develop](#develop). In the e2e shell, select the same file and run:
+Start the dev backend with this `KUBECONFIG` using step 3 in [Develop](#develop). In the e2e shell, select the same file and run:
 
 ```sh
 export KUBECONFIG=/tmp/cloud-agents-sa.json

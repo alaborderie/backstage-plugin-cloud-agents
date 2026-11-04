@@ -39,11 +39,11 @@ For RBAC verification, follow the README's [restricted Role setup](../../../../R
 ## Doctor
 
 ```sh
-curl -sf http://localhost:7007/.backstage/health/v1/readiness && kubectl -n cloud-agents get jobs
+curl -sf http://localhost:7007/.backstage/health/v1/readiness && kubectl -n cloud-agents get pods
 curl -s http://localhost:7007/api/auth/guest/refresh -H 'X-Requested-With: XMLHttpRequest' | jq -r .backstageIdentity.identity.userEntityRef
 ```
 
-Expect `{"status":"ok"}`, a job list (possibly empty), and `user:development/guest`. If the backend log says `The cloud-agents encryption key must be base64 of 32 bytes` or `runnerImage ... is required`, the env vars are missing in the backend's shell.
+Expect `{"status":"ok"}`, a pod list (possibly empty), and `user:development/guest`. If the backend log says `The cloud-agents encryption key must be base64 of 32 bytes` or `runnerImage ... is required`, the env vars are missing in the backend's shell.
 
 ## Drive
 
