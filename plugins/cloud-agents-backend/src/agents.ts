@@ -16,7 +16,7 @@ import {
   type RunStatus,
   type TierInfo,
 } from '@alaborderie/plugin-cloud-agents-common';
-import type { CredentialService } from './credentials';
+import type { CredentialService, RunCredentials } from './credentials';
 import { jobNameFor } from './jobSpec';
 import type { Cluster } from './kube';
 import { messageSection, replySection, runPrompt } from './prompt';
@@ -82,6 +82,9 @@ export interface StreamHandle {
 }
 
 const REPLAY_PAGE = 500;
+
+/** Rolls back a reply that would start a run before its credentials loaded. */
+class CredentialsNeeded extends Error {}
 
 function isTerminalStatusEvent(row: EventRow): boolean {
   return (
@@ -331,7 +334,7 @@ export class AgentService {
   private async startRun(
     agentId: string,
     reason: RunReason,
-    credentials: Awaited<ReturnType<CredentialService['forRun']>>,
+    credentials: RunCredentials | undefined,
     decide: (
       m: Mutation,
       lastRun: RunRow | undefined,
@@ -377,6 +380,7 @@ export class AgentService {
     });
     if (!started) return;
     const { run, agent, prompt } = started;
+    if (!credentials) throw new Error(`No credentials to start run ${run.id}`);
 
     try {
       await this.cluster.launch({
@@ -498,12 +502,24 @@ export class AgentService {
     answer: string,
   ): Promise<void> {
     const agent = await this.ownedAgentRow(owner, id);
-    if (agent.status !== 'needs_input') {
-      throw new ConflictError(
-        `Agent ${id} is ${agent.status}, not needs_input`,
-      );
+    // Only the answer that completes the set starts a run and needs the
+    // credentials. When the locked check finds that this answer completes it,
+    // the transaction rolls back, the credentials load, and the reply retries.
+    try {
+      await this.replyOnce(id, questionId, answer, undefined);
+    } catch (error) {
+      if (!(error instanceof CredentialsNeeded)) throw error;
+      const credentials = await this.credentials.forRun(owner, agent.harness);
+      await this.replyOnce(id, questionId, answer, credentials);
     }
-    const credentials = await this.credentials.forRun(owner, agent.harness);
+  }
+
+  private async replyOnce(
+    id: string,
+    questionId: string,
+    answer: string,
+    credentials: RunCredentials | undefined,
+  ): Promise<void> {
     await this.startRun(id, 'reply', credentials, async (m, run) => {
       if (m.agent.status !== 'needs_input' || !run) {
         throw new ConflictError(
@@ -522,14 +538,19 @@ export class AgentService {
       if (question.answer !== null) {
         throw new ConflictError(`Question ${questionId} already has an answer`);
       }
-      await this.store.answerQuestion(m.tx, run.id, questionId, answer);
       const answered = questions.map(q =>
         q.question_id === questionId ? { ...q, answer } : q,
       );
-      if (answered.some(q => q.answer === null)) return false;
+      const complete = answered.every(q => q.answer !== null);
+      if (complete && !credentials) throw new CredentialsNeeded();
+      await this.store.answerQuestion(m.tx, run.id, questionId, answer);
+      if (!complete) return false;
       return replySection(
         m.agent.branch,
-        answered.map(q => ({ question: q.question, answer: q.answer ?? '' })),
+        answered.map(q => ({
+          question: q.question,
+          answer: q.answer ?? '',
+        })),
       );
     });
   }

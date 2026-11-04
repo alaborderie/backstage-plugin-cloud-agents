@@ -27,6 +27,30 @@ const CODEX_KEY = 'sk-codex-SECRET-xyz987';
 const GITHUB_TOKEN = 'ghu_SECRET_github_token_42';
 const SECRETS = [OPENCODE_KEY, CLAUDE_TOKEN, CODEX_KEY, GITHUB_TOKEN];
 
+function twoQuestionStream(): string[] {
+  return recordedStream('opencode-needs-input')
+    .flatMap(line => {
+      const event = JSON.parse(line);
+      if (event.type === 'question' && event.question_id === 'ask-1') {
+        return [
+          line,
+          JSON.stringify({
+            ...event,
+            question_id: 'ask-2',
+            question: 'Which file name?',
+          }),
+        ];
+      }
+      if (event.type === 'run.finished') {
+        return [
+          JSON.stringify({ ...event, open_questions: ['ask-1', 'ask-2'] }),
+        ];
+      }
+      return [line];
+    })
+    .map((line, seq) => JSON.stringify({ ...JSON.parse(line), seq }));
+}
+
 const databases = TestDatabases.create({ ids: ['SQLITE_3', 'POSTGRES_16'] });
 
 describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
@@ -456,27 +480,7 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
 
   it('starts exactly one run when concurrent replies answer the last questions', async () => {
     await setCredentials();
-    const twoQuestions = recordedStream('opencode-needs-input')
-      .flatMap(line => {
-        const event = JSON.parse(line);
-        if (event.type === 'question' && event.question_id === 'ask-1') {
-          return [
-            line,
-            JSON.stringify({
-              ...event,
-              question_id: 'ask-2',
-              question: 'Which file name?',
-            }),
-          ];
-        }
-        if (event.type === 'run.finished') {
-          return [
-            JSON.stringify({ ...event, open_questions: ['ask-1', 'ask-2'] }),
-          ];
-        }
-        return [line];
-      })
-      .map((line, seq) => JSON.stringify({ ...JSON.parse(line), seq }));
+    const twoQuestions = twoQuestionStream();
     const scripts = [twoQuestions, recordedStream('opencode')];
     kube.script = () => ({ lines: scripts.shift()!, exitCode: 0 });
     const agent = (
@@ -509,6 +513,72 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
     const prompt = [...kube.secrets.values()][1]!.stringData!['prompt.md']!;
     expect(prompt).toContain('hello.txt');
     expect(prompt).toContain('Which file name?');
+  });
+
+  it('records a partial reply without run credentials and needs them only to start the run', async () => {
+    await setCredentials();
+    kube.script = () => ({ lines: twoQuestionStream(), exitCode: 0 });
+    const agent = (
+      await api('POST', '/agents', {
+        repo: 'acme/app',
+        prompt: 'p',
+        tier: 'flash',
+      })
+    ).body as Agent;
+    await agentWhen(agent.id, a => a.status === 'needs_input');
+    await api('DELETE', '/me/credentials/opencode');
+
+    expect(
+      (
+        await api('POST', `/agents/${agent.id}/reply`, {
+          questionId: 'nope',
+          answer: 'x',
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await api('POST', `/agents/${agent.id}/reply`, {
+          questionId: 'ask-1',
+          answer: 'hello',
+        })
+      ).status,
+    ).toBe(202);
+    expect(
+      (
+        await api('POST', `/agents/${agent.id}/reply`, {
+          questionId: 'ask-1',
+          answer: 'again',
+        })
+      ).status,
+    ).toBe(409);
+    const blocked = await api('POST', `/agents/${agent.id}/reply`, {
+      questionId: 'ask-2',
+      answer: 'hello.txt',
+    });
+    expect(blocked).toMatchObject({
+      status: 422,
+      body: { error: 'missing_credential', harness: 'opencode' },
+    });
+    expect(
+      (await api('GET', `/agents/${agent.id}`)).body.openQuestions.map(
+        (q: { questionId: string }) => q.questionId,
+      ),
+    ).toEqual(['ask-2']);
+    expect(kube.jobs.size).toBe(1);
+
+    kube.script = () => ({ lines: recordedStream('opencode'), exitCode: 0 });
+    await api('PUT', '/me/credentials/opencode', { value: OPENCODE_KEY });
+    expect(
+      (
+        await api('POST', `/agents/${agent.id}/reply`, {
+          questionId: 'ask-2',
+          answer: 'hello.txt',
+        })
+      ).status,
+    ).toBe(202);
+    const done = await agentWhen(agent.id, a => a.status === 'succeeded');
+    expect(done.runs).toHaveLength(2);
   });
 
   it('starts one follow-up run when two messages race', async () => {
