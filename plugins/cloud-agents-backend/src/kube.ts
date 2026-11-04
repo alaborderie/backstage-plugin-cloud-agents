@@ -6,6 +6,8 @@ import {
   CoreV1Api,
   KubeConfig,
   Log,
+  PatchStrategy,
+  setHeaderOptions,
   type V1Pod,
 } from '@kubernetes/client-node';
 import {
@@ -98,12 +100,14 @@ export class Cluster {
       if (!isStatus(error, 409)) throw error;
     }
     if (job.spec?.suspend) {
-      job.spec.suspend = false;
-      await this.batch.replaceNamespacedJob({
-        name: launch.jobName,
-        namespace,
-        body: job,
-      });
+      await this.batch.patchNamespacedJob(
+        {
+          name: launch.jobName,
+          namespace,
+          body: { spec: { suspend: false } },
+        },
+        setHeaderOptions('Content-Type', PatchStrategy.MergePatch),
+      );
     }
   }
 

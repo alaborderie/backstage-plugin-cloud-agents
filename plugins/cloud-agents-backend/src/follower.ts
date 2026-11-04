@@ -87,14 +87,19 @@ export class Followers {
         )) {
           const parsed = parseRunnerLine(line);
           if (!parsed.ok) {
-            if (line.trim()) {
-              this.logger.warn(
-                `Run ${run.id}: skipped a stdout line (${parsed.error})`,
-              );
-            }
+            // The pod log also carries the runner's stderr, which is not JSON.
+            const log = parsed.error === 'not JSON' ? 'debug' : 'warn';
+            this.logger[log](
+              `Run ${run.id}: skipped a log line (${parsed.error})`,
+            );
             continue;
           }
           if (parsed.event.seq <= lastSeq) continue;
+          if (parsed.event.seq !== lastSeq + 1) {
+            this.logger.warn(
+              `Run ${run.id}: runner seq jumped from ${lastSeq} to ${parsed.event.seq}`,
+            );
+          }
           const done = await this.agents.ingest(run, parsed.event, parsed.raw);
           lastSeq = parsed.event.seq;
           if (done) return;

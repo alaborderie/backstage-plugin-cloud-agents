@@ -384,6 +384,7 @@ export class AgentService {
     } catch (error) {
       const message = `Could not create the Job: ${(error as Error).message}`;
       this.logger.error(`Agent ${agentId} run ${run.id}: ${message}`);
+      await this.cluster.deleteJob(run.job_name).catch(() => {});
       await this.finishRun(run.id, {
         status: 'failed',
         exitCode: null,

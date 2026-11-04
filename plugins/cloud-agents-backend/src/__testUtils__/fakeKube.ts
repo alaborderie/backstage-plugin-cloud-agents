@@ -177,15 +177,20 @@ export class FakeKube {
       else this.notFound(res);
       return;
     }
-    if (job?.[2] && req.method === 'PUT') {
-      const body = await this.body<V1Job>(req);
-      if (!this.jobs.has(job[2])) {
+    if (job?.[2] && req.method === 'PATCH') {
+      const found = this.jobs.get(job[2]);
+      if (!found) {
         this.notFound(res);
         return;
       }
-      this.jobs.set(job[2], body);
-      if (!body.spec?.suspend) this.startPod(body);
-      this.json(res, 200, body);
+      if (req.headers['content-type'] !== 'application/merge-patch+json') {
+        this.json(res, 415, { code: 415 });
+        return;
+      }
+      const patch = await this.body<{ spec?: { suspend?: boolean } }>(req);
+      found.spec = { ...found.spec!, ...patch.spec };
+      if (!found.spec.suspend) this.startPod(found);
+      this.json(res, 200, found);
       return;
     }
     if (job?.[2] && req.method === 'DELETE') {
