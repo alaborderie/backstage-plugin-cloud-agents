@@ -3,6 +3,17 @@ export type Harness = 'claude' | 'codex' | 'opencode';
 
 export const HARNESSES: readonly Harness[] = ['claude', 'codex', 'opencode'];
 
+/** The runner's `tool.call.kind`. */
+export type ToolKind =
+  | 'shell'
+  | 'read'
+  | 'edit'
+  | 'search'
+  | 'web'
+  | 'mcp'
+  | 'task'
+  | 'other';
+
 interface RunnerEventBase {
   v: 1;
   seq: number;
@@ -61,15 +72,7 @@ export type RunnerEvent = RunnerEventBase &
         type: 'tool.call';
         call_id: string;
         name: string;
-        kind:
-          | 'shell'
-          | 'read'
-          | 'edit'
-          | 'search'
-          | 'web'
-          | 'mcp'
-          | 'task'
-          | 'other';
+        kind: ToolKind;
         input: unknown;
         parent_call_id: string | null;
       }
@@ -121,3 +124,31 @@ export type RunnerEvent = RunnerEventBase &
   );
 
 export type RunnerEventType = RunnerEvent['type'];
+
+const SUMMARY_KEYS = [
+  'command',
+  'cmd',
+  'file_path',
+  'filePath',
+  'path',
+  'pattern',
+  'query',
+  'url',
+  'description',
+];
+
+/**
+ * One line that says what a `tool.call` does, from the first familiar key of
+ * its `input`: the command, the file, the pattern, or the URL.
+ */
+export function summarizeToolInput(input: unknown): string {
+  if (input && typeof input === 'object') {
+    const record = input as Record<string, unknown>;
+    for (const key of SUMMARY_KEYS) {
+      const value = record[key];
+      if (typeof value === 'string') return value;
+      if (Array.isArray(value)) return value.join(' ');
+    }
+  }
+  return typeof input === 'string' ? input : JSON.stringify(input) ?? '';
+}

@@ -1,0 +1,520 @@
+/*
+ * Every color resolves to a BUI variable. The theme (Ember in production)
+ * sets those; `--ember-*` covers the one token BUI lacks, tertiary text.
+ */
+.scope {
+  --ca-bg: var(--bui-bg-app);
+  --ca-s1: var(--bui-bg-neutral-1);
+  --ca-s2: var(--bui-bg-neutral-2);
+  --ca-s3: var(--bui-bg-neutral-3);
+  --ca-fg1: var(--bui-fg-primary);
+  --ca-fg2: var(--bui-fg-secondary);
+  --ca-fg3: var(--ember-fg-tertiary, var(--bui-fg-secondary));
+  --ca-line1: var(--bui-border-1);
+  --ca-line2: var(--bui-border-2);
+  --ca-line-input: var(--bui-fg-disabled);
+  --ca-ring: var(--bui-ring);
+  --ca-attn: var(--bui-announcement-bg);
+  --ca-on-attn: var(--bui-announcement-fg);
+  --ca-attn-fg: var(--bui-fg-announcement);
+  --ca-attn-soft: var(--bui-announcement-bg-subdued);
+  --ca-attn-line: var(--bui-announcement-border);
+  --ca-ok: var(--bui-fg-positive);
+  --ca-ok-soft: var(--bui-positive-bg-subdued);
+  --ca-ok-line: var(--bui-positive-border);
+  --ca-warn: var(--bui-fg-warning);
+  --ca-warn-soft: var(--bui-warning-bg-subdued);
+  --ca-danger: var(--bui-fg-negative);
+  --ca-danger-soft: var(--bui-negative-bg-subdued);
+  --ca-danger-line: var(--bui-negative-border);
+  --ca-shadow: color-mix(in srgb, var(--bui-black) 70%, transparent);
+  --ca-sans: var(--bui-font-regular);
+  --ca-mono: var(--bui-font-monospace);
+  --ca-r-sm: var(--bui-radius-2);
+  --ca-r-md: var(--bui-radius-3);
+  --ca-r-lg: var(--bui-radius-4);
+  --ca-r-xl: var(--bui-radius-5);
+  --ca-e2: 0 12px 32px -12px var(--ca-shadow), 0 0 0 1px var(--ca-line2);
+  --ca-e3: 0 32px 80px -16px var(--ca-shadow), 0 0 0 1px var(--ca-line2);
+  --ca-press: 90ms;
+  --ca-fast: 160ms;
+  --ca-base: 240ms;
+  --ca-slow: 380ms;
+  --ca-celebrate: 900ms;
+  --ca-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ca-ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --ca-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ca-target: 36px;
+  color: var(--ca-fg1);
+  font-family: var(--ca-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (pointer: coarse) {
+  .scope {
+    --ca-target: 44px;
+  }
+  .scope :global(.bui-Button),
+  .scope :global(.bui-ButtonLink),
+  .scope :global(.bui-ButtonIcon),
+  .scope :global(.bui-ToggleButton) {
+    min-height: 44px;
+  }
+  .scope :global(.bui-ButtonIcon) {
+    min-width: 44px;
+  }
+}
+
+.scope :focus-visible {
+  outline: 2px solid var(--ca-ring);
+  outline-offset: 2px;
+}
+
+.scope a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.mono {
+  font-family: var(--ca-mono);
+  font-size: 0.92em;
+}
+
+.icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.iconXs {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.kbd {
+  display: inline-block;
+  font: 500 11px/1 var(--ca-mono);
+  color: var(--ca-fg3);
+  padding: 3px 5px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--ca-line2);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  color: var(--ca-fg3);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.meta > * {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tier {
+  color: var(--ca-fg2);
+}
+
+/* Status pill: six states, a live dot, and a morph when the status changes. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color var(--ca-base), color var(--ca-base);
+}
+
+.pillLg {
+  height: 28px;
+  padding: 0 11px;
+  font-size: 13px;
+}
+
+.pill[data-status='running'] {
+  color: var(--ca-fg1);
+  background: var(--ca-s3);
+}
+.pill[data-status='needs_input'] {
+  color: var(--ca-on-attn);
+  background: var(--ca-attn);
+}
+.pill[data-status='queued'] {
+  color: var(--ca-fg2);
+  box-shadow: inset 0 0 0 1px var(--ca-line2);
+}
+.pill[data-status='succeeded'] {
+  color: var(--ca-ok);
+  background: var(--ca-ok-soft);
+}
+.pill[data-status='failed'] {
+  color: var(--ca-danger);
+  background: var(--ca-danger-soft);
+}
+.pill[data-status='stopped'] {
+  color: var(--ca-fg2);
+  background: var(--ca-s2);
+}
+.pill[data-morph] {
+  animation: morph var(--ca-slow) var(--ca-spring);
+}
+@keyframes morph {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.4;
+  }
+}
+
+.liveDot {
+  position: relative;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ca-attn-fg);
+  flex: none;
+}
+.liveDot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--ca-attn-fg);
+  animation: ping 1.8s var(--ca-ease-out) infinite;
+}
+@keyframes ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  80%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.progress {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 30%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--ca-attn-fg),
+    transparent
+  );
+  animation: indeterminate 1.6s var(--ca-ease-inout) infinite;
+}
+@keyframes indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+  flex: none;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.elapsed {
+  font: 400 12px/1 var(--ca-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ca-fg3);
+}
+
+.card {
+  background: var(--ca-s1);
+  border-radius: var(--ca-r-xl);
+  box-shadow: inset 0 0 0 1px var(--ca-line1);
+}
+
+.sectionH {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 4px 10px;
+  color: var(--ca-fg3);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sectionH::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--ca-line1);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  color: var(--ca-fg2);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--ca-line2);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color var(--ca-fast), color var(--ca-fast),
+    transform var(--ca-press);
+}
+.chip:hover {
+  background: var(--ca-s2);
+  color: var(--ca-fg1);
+}
+.chip:active {
+  transform: scale(0.96);
+}
+@media (pointer: coarse) {
+  .chip {
+    min-height: 44px;
+  }
+}
+
+.enter {
+  animation: enter var(--ca-slow) var(--ca-ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 32ms);
+}
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.view {
+  animation: view var(--ca-slow) var(--ca-ease-out) backwards;
+}
+@keyframes view {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+
+/* Empty, error, and not-found states. */
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 56px 24px;
+  color: var(--ca-fg2);
+}
+.halo {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--ca-s2);
+  color: var(--ca-fg2);
+  margin-bottom: 4px;
+}
+.halo svg {
+  width: 22px;
+  height: 22px;
+}
+.state[data-tone='error'] .halo {
+  color: var(--ca-danger);
+  background: var(--ca-danger-soft);
+}
+.state h3 {
+  margin: 0;
+  color: var(--ca-fg1);
+  font-size: 16px;
+  font-weight: 600;
+}
+.state p {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 13px;
+  color: var(--ca-fg3);
+}
+.state code {
+  font-family: var(--ca-mono);
+  font-size: 12px;
+  color: var(--ca-fg2);
+}
+.stateAction {
+  margin-top: 10px;
+}
+
+.inlineAlert {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: var(--ca-r-md);
+  font-size: 13px;
+}
+.inlineAlert svg {
+  flex: none;
+  margin-top: 1px;
+}
+.inlineAlert a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.inlineAlert[data-tone='warn'] {
+  background: var(--ca-warn-soft);
+  color: var(--ca-warn);
+}
+.inlineAlert[data-tone='ok'] {
+  background: var(--ca-ok-soft);
+  color: var(--ca-ok);
+}
+.inlineAlert[data-tone='error'] {
+  background: var(--ca-danger-soft);
+  color: var(--ca-danger);
+}
+
+/* The success celebration: sixteen sparks, transform and opacity only. */
+.burst {
+  position: fixed;
+  z-index: 90;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.burst i {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: spark var(--ca-celebrate) var(--ca-ease-out) forwards;
+  animation-delay: calc(var(--k) * 12ms);
+}
+.burst i:nth-child(4n + 1) {
+  background: var(--ca-attn-fg);
+}
+.burst i:nth-child(4n + 2) {
+  background: var(--ca-ok);
+}
+.burst i:nth-child(4n + 3) {
+  background: var(--ca-fg1);
+}
+.burst i:nth-child(4n) {
+  background: var(--ca-warn);
+}
+@keyframes spark {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), var(--y)) rotate(var(--r)) scale(0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scope *,
+  .scope *::before,
+  .scope *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .liveDot::after,
+  .progress::after,
+  .burst {
+    animation: none !important;
+    display: none;
+  }
+  .spinner {
+    animation: none !important;
+    border-right-color: currentColor;
+    opacity: 0.6;
+  }
+}
+
+/* Field boundaries meet 3:1 non-text contrast; focus draws the ring. */
+.scope :global(.bui-InputWrapper),
+.scope :global(.bui-SearchFieldInputWrapper),
+.scope :global(.bui-PasswordFieldInputWrapper),
+.scope :global(.bui-ComboboxInput),
+.scope :global(.bui-SelectTrigger),
+.scope :global(.bui-TextAreaField) > :global(.bui-TextArea) {
+  background: var(--ca-bg);
+  box-shadow: inset 0 0 0 1px var(--ca-line-input);
+  border-radius: var(--ca-r-md);
+  transition: box-shadow var(--ca-fast);
+}
+.scope :global(.bui-InputWrapper):focus-within,
+.scope :global(.bui-SearchFieldInputWrapper):focus-within,
+.scope :global(.bui-PasswordFieldInputWrapper):focus-within,
+.scope :global(.bui-ComboboxInput):focus-within,
+.scope :global(.bui-TextAreaField) > :global(.bui-TextArea):focus {
+  box-shadow: inset 0 0 0 1px var(--ca-ring),
+    0 0 0 3px color-mix(in srgb, var(--ca-ring) 18%, transparent);
+}
+.scope :global(.bui-Input) {
+  background: var(--ca-bg);
+  box-shadow: inset 0 0 0 1px var(--ca-line-input);
+}
+.scope :global(.bui-Input):focus {
+  box-shadow: inset 0 0 0 1px var(--ca-ring),
+    0 0 0 3px color-mix(in srgb, var(--ca-ring) 18%, transparent);
+}
+
+.scope :global(.bui-Button)[data-variant='secondary'],
+.scope :global(.bui-ButtonLink)[data-variant='secondary'] {
+  background: var(--ca-s2);
+  box-shadow: inset 0 0 0 1px var(--ca-line2);
+}
+.scope :global(.bui-Button)[data-variant='secondary'][data-hovered],
+.scope :global(.bui-ButtonLink)[data-variant='secondary'][data-hovered] {
+  background: var(--ca-s3);
+}

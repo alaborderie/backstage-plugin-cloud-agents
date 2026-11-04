@@ -2,7 +2,6 @@ import {
   ApiBlueprint,
   PageBlueprint,
   createFrontendPlugin,
-  createRouteRef,
   discoveryApiRef,
   fetchApiRef,
 } from '@backstage/frontend-plugin-api';
@@ -12,8 +11,10 @@ import {
   createRoutableExtension,
   createRouteRef as createLegacyRouteRef,
 } from '@backstage/core-plugin-api';
-import SmartToyIcon from '@material-ui/icons/Android';
+import { RiRobot2Line } from '@remixicon/react';
 import { CloudAgentsClient, cloudAgentsApiRef } from './api';
+import { rootRouteRef } from './routes';
+import { cloudAgentsHomeWidget } from './widget';
 
 const cloudAgentsApi = ApiBlueprint.make({
   params: defineParams =>
@@ -24,13 +25,11 @@ const cloudAgentsApi = ApiBlueprint.make({
     }),
 });
 
-export const rootRouteRef = createRouteRef();
-
 const cloudAgentsPage = PageBlueprint.make({
   params: {
     path: '/cloud-agents',
     title: 'Cloud agents',
-    icon: <SmartToyIcon />,
+    icon: <RiRobot2Line />,
     routeRef: rootRouteRef,
     noHeader: true,
     loader: () => import('./components/Root').then(m => <m.CloudAgentsRoot />),
@@ -39,16 +38,17 @@ const cloudAgentsPage = PageBlueprint.make({
 
 /**
  * The cloud-agents plugin for the new frontend system. Feature discovery
- * picks it up; it adds the page at `/cloud-agents` and its nav item.
+ * picks it up; it adds the page at `/cloud-agents`, its nav item, and the
+ * Cloud agents home page widget.
  *
  * @public
  */
 export const cloudAgentsPlugin = createFrontendPlugin({
   pluginId: 'cloud-agents',
   title: 'Cloud agents',
-  icon: <SmartToyIcon />,
+  icon: <RiRobot2Line />,
   routes: { root: rootRouteRef },
-  extensions: [cloudAgentsApi, cloudAgentsPage],
+  extensions: [cloudAgentsApi, cloudAgentsPage, cloudAgentsHomeWidget],
 });
 
 const legacyRootRouteRef = createLegacyRouteRef({ id: 'cloud-agents' });

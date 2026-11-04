@@ -197,3 +197,26 @@ field or fixes a status code.
   `GET /me/tokens` returns `[{"id", "name", "createdAt", "lastUsedAt"}]`.
 - Errors other than `422` use Backstage's error body:
   `{"error": {"name", "message"}, "response": {"statusCode"}}`.
+
+## Additions: current activity and follow-up messages
+
+These fields and events are additive. The API stays version 1, and clients
+of the contract above ignore unknown fields and unknown event types.
+
+- The agent object, from `GET /agents` and `GET /agents/:id`, has `activity`:
+  what the agent did last, for list rows and widgets. It is `null` before the
+  first tool call or assistant message.
+
+  ```json
+  {"type": "tool.call", "name": "Bash", "kind": "shell", "summary": "yarn tsc", "ts": "ISO"}
+  {"type": "assistant.message", "text": "Opening the pull request.", "ts": "ISO"}
+  ```
+
+  `summary` is the call's command, file path, pattern, URL, or description.
+  `text` is the message's first line. Both are at most 200 characters. `ts` is
+  the runner event's `ts`.
+- `POST /agents/:id/messages` adds a plugin event `agent.message`
+  (`{"type": "agent.message", "text": "...", "ts": "ISO"}`) to the stream. Its
+  envelope carries the `runId` of the run the message starts, and it comes
+  just before that run's `agent.run_started` with `reason: "message"`. It
+  replays with `Last-Event-ID` like every other event.

@@ -1,4 +1,4 @@
-import type { Harness, RunnerEvent } from './events';
+import type { Harness, RunnerEvent, ToolKind } from './events';
 
 /** docs/API.md "Agents and runs". */
 export type AgentStatus =
@@ -76,6 +76,27 @@ export interface OpenQuestion {
   options: string[];
 }
 
+/**
+ * What the agent did last: its latest tool call or assistant message. One
+ * line, for list rows and widgets; the event stream has the full text.
+ */
+export type AgentActivity =
+  | {
+      type: 'tool.call';
+      name: string;
+      kind: ToolKind;
+      /** What the call does, such as the command or the file path. */
+      summary: string;
+      /** The runner event's `ts`. */
+      ts: string;
+    }
+  | {
+      type: 'assistant.message';
+      /** The message's first line, at most 200 characters. */
+      text: string;
+      ts: string;
+    };
+
 export interface Agent {
   id: string;
   title: string;
@@ -92,6 +113,8 @@ export interface Agent {
   openQuestions: OpenQuestion[];
   prUrl: string | null;
   parent: AgentParent | null;
+  /** The latest tool call or assistant message; null before the first. */
+  activity: AgentActivity | null;
 }
 
 /** Events the plugin adds to an agent's stream, in the `agent.*` namespace. */
@@ -103,7 +126,9 @@ export type PluginEvent =
       /** Why the plugin failed the run, when the runner could not say. */
       error?: string;
     }
-  | { type: 'agent.run_started'; runId: string; reason: RunReason; ts: string };
+  | { type: 'agent.run_started'; runId: string; reason: RunReason; ts: string }
+  /** The user's follow-up message, just before the run it starts. */
+  | { type: 'agent.message'; text: string; ts: string };
 
 /** The `data` of one `agent-event` SSE message. */
 export interface AgentEventEnvelope {
