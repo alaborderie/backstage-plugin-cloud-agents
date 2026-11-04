@@ -12,7 +12,6 @@
     "rootDir": ".",
     "jsx": "react-jsx",
     "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true
+    "noUncheckedIndexedAccess": true
   }
 }
