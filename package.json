@@ -14,7 +14,7 @@
     "clean": "backstage-cli repo clean",
     "test": "backstage-cli repo test",
     "lint": "backstage-cli repo lint",
-    "prettier:check": "prettier --check plugins README.md"
+    "prettier:check": "prettier --check --ignore-path .gitignore plugins README.md"
   },
   "workspaces": [
     "plugins/*"

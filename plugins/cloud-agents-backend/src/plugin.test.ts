@@ -454,6 +454,86 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
     expect(started.map(m => m.data.event.reason)).toEqual(['initial', 'reply']);
   });
 
+  it('starts exactly one run when concurrent replies answer the last questions', async () => {
+    await setCredentials();
+    const twoQuestions = recordedStream('opencode-needs-input')
+      .flatMap(line => {
+        const event = JSON.parse(line);
+        if (event.type === 'question' && event.question_id === 'ask-1') {
+          return [
+            line,
+            JSON.stringify({
+              ...event,
+              question_id: 'ask-2',
+              question: 'Which file name?',
+            }),
+          ];
+        }
+        if (event.type === 'run.finished') {
+          return [
+            JSON.stringify({ ...event, open_questions: ['ask-1', 'ask-2'] }),
+          ];
+        }
+        return [line];
+      })
+      .map((line, seq) => JSON.stringify({ ...JSON.parse(line), seq }));
+    const scripts = [twoQuestions, recordedStream('opencode')];
+    kube.script = () => ({ lines: scripts.shift()!, exitCode: 0 });
+    const agent = (
+      await api('POST', '/agents', {
+        repo: 'acme/app',
+        prompt: 'p',
+        tier: 'flash',
+      })
+    ).body as Agent;
+    const waiting = await agentWhen(agent.id, a => a.status === 'needs_input');
+    expect(waiting.openQuestions.map(q => q.questionId)).toEqual([
+      'ask-1',
+      'ask-2',
+    ]);
+
+    const replies = await Promise.all([
+      api('POST', `/agents/${agent.id}/reply`, {
+        questionId: 'ask-1',
+        answer: 'hello',
+      }),
+      api('POST', `/agents/${agent.id}/reply`, {
+        questionId: 'ask-2',
+        answer: 'hello.txt',
+      }),
+    ]);
+    expect(replies.map(r => r.status)).toEqual([202, 202]);
+    const done = await agentWhen(agent.id, a => a.status === 'succeeded');
+    expect(done.runs).toHaveLength(2);
+    expect(kube.jobs.size).toBe(2);
+    const prompt = [...kube.secrets.values()][1]!.stringData!['prompt.md']!;
+    expect(prompt).toContain('hello.txt');
+    expect(prompt).toContain('Which file name?');
+  });
+
+  it('starts one follow-up run when two messages race', async () => {
+    await setCredentials();
+    const agent = (
+      await api('POST', '/agents', {
+        repo: 'acme/app',
+        prompt: 'p',
+        tier: 'flash',
+      })
+    ).body as Agent;
+    await agentWhen(agent.id, a => a.status === 'succeeded');
+    const messages = await Promise.all([
+      api('POST', `/agents/${agent.id}/messages`, { text: 'one' }),
+      api('POST', `/agents/${agent.id}/messages`, { text: 'two' }),
+    ]);
+    expect(messages.map(r => r.status).sort()).toEqual([202, 409]);
+    const done = await agentWhen(
+      agent.id,
+      a => a.status === 'succeeded' && a.runs.length === 2,
+    );
+    expect(done.runs).toHaveLength(2);
+    expect(kube.jobs.size).toBe(2);
+  });
+
   it('stops an agent: deletes the Job, stores the cancelled run.finished, and closes the stream', async () => {
     await setCredentials();
     const lines = recordedStream('opencode-cancelled');

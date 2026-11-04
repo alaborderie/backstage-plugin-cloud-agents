@@ -319,19 +319,28 @@ export class AgentService {
       updated_at: now,
     };
     await this.store.insertAgent(this.store.knex, row);
-    await this.startRun(row.id, 'initial', null, credentials);
+    await this.startRun(row.id, 'initial', credentials, async () => null);
     return this.getAgent(owner, id);
   }
 
-  /** Records the run, then creates its Job. A failed launch fails the run. */
+  /**
+   * Records the run, then creates its Job. A failed launch fails the run.
+   * `decide` runs under the agent row lock: it checks that the run may start
+   * and returns the run's prompt input, or `false` to start no run.
+   */
   private async startRun(
     agentId: string,
     reason: RunReason,
-    input: string | null,
     credentials: Awaited<ReturnType<CredentialService['forRun']>>,
+    decide: (
+      m: Mutation,
+      lastRun: RunRow | undefined,
+    ) => Promise<string | null | false>,
   ): Promise<void> {
-    const { run, agent, prompt } = await this.mutate(agentId, async m => {
+    const started = await this.mutate(agentId, async m => {
       const runs = await this.store.listRuns(m.tx, agentId);
+      const input = await decide(m, runs[runs.length - 1]);
+      if (input === false) return undefined;
       const ordinal = runs.length + 1;
       const runRow: RunRow = {
         id: randomUUID(),
@@ -366,6 +375,8 @@ export class AgentService {
         prompt: runPrompt(m.agent.prompt, inputs),
       };
     });
+    if (!started) return;
+    const { run, agent, prompt } = started;
 
     try {
       await this.cluster.launch({
@@ -492,55 +503,51 @@ export class AgentService {
         `Agent ${id} is ${agent.status}, not needs_input`,
       );
     }
-    const run = await this.lastRun(id);
-    if (!run) throw new NotFoundError(`No run for agent ${id}`);
-    const questions = (
-      await this.store.listQuestions(this.store.knex, run.id)
-    ).filter(q => Boolean(q.blocking));
-    const question = questions.find(q => q.question_id === questionId);
-    if (!question) {
-      throw new NotFoundError(`No open question ${questionId} on agent ${id}`);
-    }
-    if (question.answer !== null) {
-      throw new ConflictError(`Question ${questionId} already has an answer`);
-    }
-    const answered = questions.map(q =>
-      q.question_id === questionId ? { ...q, answer } : q,
-    );
-    const complete = answered.every(q => q.answer !== null);
-    const credentials = complete
-      ? await this.credentials.forRun(owner, agent.harness)
-      : undefined;
-    await this.store.answerQuestion(
-      this.store.knex,
-      run.id,
-      questionId,
-      answer,
-    );
-    if (!credentials) return;
-    await this.startRun(
-      id,
-      'reply',
-      replySection(
-        agent.branch,
+    const credentials = await this.credentials.forRun(owner, agent.harness);
+    await this.startRun(id, 'reply', credentials, async (m, run) => {
+      if (m.agent.status !== 'needs_input' || !run) {
+        throw new ConflictError(
+          `Agent ${id} is ${m.agent.status}, not needs_input`,
+        );
+      }
+      const questions = (await this.store.listQuestions(m.tx, run.id)).filter(
+        q => Boolean(q.blocking),
+      );
+      const question = questions.find(q => q.question_id === questionId);
+      if (!question) {
+        throw new NotFoundError(
+          `No open question ${questionId} on agent ${id}`,
+        );
+      }
+      if (question.answer !== null) {
+        throw new ConflictError(`Question ${questionId} already has an answer`);
+      }
+      await this.store.answerQuestion(m.tx, run.id, questionId, answer);
+      const answered = questions.map(q =>
+        q.question_id === questionId ? { ...q, answer } : q,
+      );
+      if (answered.some(q => q.answer === null)) return false;
+      return replySection(
+        m.agent.branch,
         answered.map(q => ({ question: q.question, answer: q.answer ?? '' })),
-      ),
-      credentials,
-    );
+      );
+    });
   }
 
   async message(owner: string, id: string, text: string): Promise<void> {
     const agent = await this.ownedAgentRow(owner, id);
-    if (agent.status === 'queued' || agent.status === 'running') {
+    const busy = (status: AgentStatus) =>
+      status === 'queued' || status === 'running';
+    if (busy(agent.status)) {
       throw new ConflictError(`Agent ${id} has an active run`);
     }
     const credentials = await this.credentials.forRun(owner, agent.harness);
-    await this.startRun(
-      id,
-      'message',
-      messageSection(agent.branch, text),
-      credentials,
-    );
+    await this.startRun(id, 'message', credentials, async m => {
+      if (busy(m.agent.status)) {
+        throw new ConflictError(`Agent ${id} has an active run`);
+      }
+      return messageSection(m.agent.branch, text);
+    });
   }
 
   /**
