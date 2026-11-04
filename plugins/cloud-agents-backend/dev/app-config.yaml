@@ -1,0 +1,22 @@
+# Dev backend for the cloud-agents plugin. The plugin reads
+# CLOUD_AGENTS_RUNNER_IMAGE, CLOUD_AGENTS_ENCRYPTION_KEY, and
+# CLOUD_AGENTS_NAMESPACE from the environment, and the cluster from the
+# current kubeconfig context. See the repository README.
+app:
+  baseUrl: http://localhost:3000
+backend:
+  baseUrl: http://localhost:7007
+  listen:
+    port: 7007
+  cors:
+    origin: http://localhost:3000
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
+  database:
+    client: better-sqlite3
+    connection:
+      directory: .sqlite
+auth:
+  environment: development
+  providers:
+    guest: {}
