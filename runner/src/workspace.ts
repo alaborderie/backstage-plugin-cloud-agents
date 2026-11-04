@@ -36,7 +36,7 @@ export async function prepareWorkspace(spec: WorkspaceSpec): Promise<{ head_sha:
     await check('git', ['clone', '--quiet', `https://github.com/${spec.repo}.git`, workdir], { env });
   }
   const git = (...args: string[]): Promise<string> => check('git', args, { env, cwd: workdir });
-  const remote = await runProc('git', ['ls-remote', '--exit-code', '--heads', 'origin', spec.branch], { env, cwd: workdir });
+  const remote = await runProc('git', ['ls-remote', '--exit-code', 'origin', `refs/heads/${spec.branch}`], { env, cwd: workdir });
   const branchExisted = remote.code === 0;
   await git('fetch', '--quiet', 'origin', branchExisted ? spec.branch : spec.base);
   await git('checkout', '--quiet', '-B', spec.branch, 'FETCH_HEAD');

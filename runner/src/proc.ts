@@ -30,6 +30,8 @@ export function baseEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   return out;
 }
 
+const KILL_GRACE_MS = 10_000;
+
 export interface ProcResult {
   code: number | null;
   stdout: string;
@@ -52,9 +54,26 @@ export function runProc(command: string, args: string[], options: ProcOptions): 
       cwd: options.cwd,
       env: options.env,
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...(options.signal ? { signal: options.signal } : {}),
+      detached: options.signal !== undefined,
       ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
     });
+    let killTimer: NodeJS.Timeout | undefined;
+    const killGroup = (sig: NodeJS.Signals): void => {
+      try {
+        if (child.pid !== undefined) process.kill(-child.pid, sig);
+      } catch {
+        // The group already exited.
+      }
+    };
+    // The harness's shells and MCP servers share its process group and would otherwise keep the pipes open.
+    const cancel = (): void => {
+      killGroup('SIGTERM');
+      killTimer = setTimeout(() => {
+        killGroup('SIGKILL');
+      }, KILL_GRACE_MS);
+    };
+    if (options.signal?.aborted) cancel();
+    else options.signal?.addEventListener('abort', cancel, { once: true });
     let stdout = '';
     let stderr = '';
     const stdoutLines = createInterface({ input: child.stdout });
@@ -75,6 +94,8 @@ export function runProc(command: string, args: string[], options: ProcOptions): 
       spawnError = error;
     });
     child.on('close', (code) => {
+      clearTimeout(killTimer);
+      options.signal?.removeEventListener('abort', cancel);
       if (spawnError && code === null && !options.signal?.aborted) stderr += `${spawnError.message}\n`;
       resolve({ code, stdout, stderr });
     });

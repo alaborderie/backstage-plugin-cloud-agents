@@ -134,8 +134,8 @@ export async function run(opts: RunOptions, env: NodeJS.ProcessEnv, stdout: Sink
   }
 
   const openQuestions = emitter.emitted.flatMap((e) => (e.type === 'question' && e.blocking ? [e.question_id] : []));
-  const status: RunStatus = signal.aborted ? 'cancelled' : error !== null ? 'failed' : openQuestions.length > 0 ? 'needs_input' : 'succeeded';
   const state = await branchState(workspace);
+  const status: RunStatus = signal.aborted ? 'cancelled' : error !== null ? 'failed' : openQuestions.length > 0 ? 'needs_input' : 'succeeded';
   const usage = emitter.emitted.reduce((total, e) => (e.type === 'usage' ? addUsage(total, e) : total), emptyUsage());
   emitter.emit({
     type: 'run.finished',
