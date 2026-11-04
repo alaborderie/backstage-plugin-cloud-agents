@@ -17,7 +17,8 @@ import {
   type TierInfo,
 } from '@alaborderie/plugin-cloud-agents-common';
 import type { CredentialService, RunCredentials } from './credentials';
-import { jobNameFor } from './jobSpec';
+import { randomToken, sha256Hex } from './crypto';
+import { jobNameFor, RUN_TOKEN_ENV } from './jobSpec';
 import { KubernetesRefusal, type Cluster } from './kube';
 import { messageSection, replySection, runPrompt } from './prompt';
 import {
@@ -340,6 +341,7 @@ export class AgentService {
       lastRun: RunRow | undefined,
     ) => Promise<string | null | false>,
   ): Promise<void> {
+    const runToken = randomToken(32);
     const started = await this.mutate(agentId, async m => {
       const runs = await this.store.listRuns(m.tx, agentId);
       const input = await decide(m, runs[runs.length - 1]);
@@ -359,6 +361,7 @@ export class AgentService {
         runner_seq: -1,
         pr_url: null,
         error: null,
+        credential_token_hash: sha256Hex(runToken),
       };
       await this.store.insertRun(m.tx, runRow);
       await this.store.updateAgent(m.tx, agentId, { stop_requested: false });
@@ -394,7 +397,10 @@ export class AgentService {
         base: agent.base,
         branch: agent.branch,
         prompt,
-        credentials,
+        credentials: {
+          ...credentials,
+          env: { ...credentials.env, [RUN_TOKEN_ENV]: runToken },
+        },
       });
     } catch (error) {
       const message = `Could not create the Job: ${(error as Error).message}`;

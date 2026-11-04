@@ -97,6 +97,8 @@ describe('readCloudAgentsConfig', () => {
       CLOUD_AGENTS_ENCRYPTION_KEY: key.toString('base64'),
       AUTH_GITHUB_CLIENT_ID: 'id',
       AUTH_GITHUB_CLIENT_SECRET: 'secret',
+      CLOUD_AGENTS_RUNNER_BACKEND_URL:
+        'http://backstage.default.svc.cluster.local/',
     });
     expect(cfg).toMatchObject({
       namespace: 'agents',
@@ -113,6 +115,9 @@ describe('readCloudAgentsConfig', () => {
     );
     expect(cfg.githubCallbackUrl).toBe(
       'https://bs.example/api/cloud-agents/me/github/callback',
+    );
+    expect(cfg.runnerGithubTokenUrl).toBe(
+      'http://backstage.default.svc.cluster.local/api/cloud-agents/runner/github-token',
     );
   });
 
@@ -137,6 +142,7 @@ describe('readCloudAgentsConfig', () => {
       requests: { cpu: '250m', memory: '256Mi' },
       limits: { memory: '1Gi' },
     });
+    expect(cfg.runnerGithubTokenUrl).toBeUndefined();
   });
 
   it('takes tiers from app-config and rejects a bad key or harness', () => {
@@ -189,6 +195,7 @@ describe('job spec', () => {
       nodeSelector: undefined,
       resources: { requests: {}, limits: {} },
     },
+    runnerGithubTokenUrl: 'http://bs.svc/api/cloud-agents/runner/github-token',
   };
   const launch: RunLaunch = {
     agentId: 'ag_0123456789ab',
@@ -211,6 +218,10 @@ describe('job spec', () => {
     expect(job.spec!.suspend).toBe(true);
     expect(container.env).toEqual([
       { name: 'CLOUD_AGENT_RUN_ID', value: 'run-1' },
+      {
+        name: 'CLOUD_AGENT_GH_TOKEN_URL',
+        value: 'http://bs.svc/api/cloud-agents/runner/github-token',
+      },
       {
         name: 'GH_TOKEN',
         valueFrom: { secretKeyRef: { name: launch.jobName, key: 'GH_TOKEN' } },

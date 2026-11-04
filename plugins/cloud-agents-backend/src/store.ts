@@ -44,6 +44,8 @@ export interface RunRow {
   runner_seq: number;
   pr_url: string | null;
   error: string | null;
+  /** SHA-256 of the token the run's pod uses to fetch its GitHub token. */
+  credential_token_hash: string | null;
 }
 
 export interface QuestionRow {
@@ -176,6 +178,18 @@ export class Store {
     return this.knex<RunRow>('runs').where({ status: 'running' });
   }
 
+  async findActiveRunAgent(
+    credentialTokenHash: string,
+  ): Promise<AgentRow | undefined> {
+    return this.knex<AgentRow>('agents')
+      .join('runs', 'runs.agent_id', 'agents.id')
+      .where({
+        'runs.credential_token_hash': credentialTokenHash,
+        'runs.status': 'running',
+      })
+      .first('agents.*');
+  }
+
   async insertQuestion(db: Db, row: QuestionRow): Promise<void> {
     await db('questions')
       .insert(row)
@@ -256,18 +270,21 @@ export class Store {
   async getCredential(
     owner: string,
     name: string,
+    db: Db = this.knex,
+    opts?: { forUpdate?: boolean },
   ): Promise<CredentialRow | undefined> {
-    return this.knex<CredentialRow>('credentials')
+    const query = db<CredentialRow>('credentials')
       .where({ owner_ref: owner, name })
       .first();
+    return opts?.forUpdate ? query.forUpdate() : query;
   }
 
   async listCredentials(owner: string): Promise<CredentialRow[]> {
     return this.knex<CredentialRow>('credentials').where({ owner_ref: owner });
   }
 
-  async putCredential(row: CredentialRow): Promise<void> {
-    await this.knex('credentials')
+  async putCredential(row: CredentialRow, db: Db = this.knex): Promise<void> {
+    await db('credentials')
       .insert(row)
       .onConflict(['owner_ref', 'name'])
       .merge(['sealed', 'meta', 'updated_at']);

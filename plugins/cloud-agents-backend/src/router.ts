@@ -227,6 +227,24 @@ export function createRouter(deps: RouterDeps): express.Router {
     res.status(202).json(await agents.getAgent(owner, req.params.id));
   });
 
+  /**
+   * A runner pod's current GitHub token. The pod authenticates with its run's
+   * token, which works only while the run is active.
+   */
+  router.get('/runner/github-token', async (req, res) => {
+    const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? '');
+    const agent = match?.[1]
+      ? await store.findActiveRunAgent(sha256Hex(match[1]))
+      : undefined;
+    if (!agent) throw new AuthenticationError('Unknown or finished run');
+    const token = await credentials.githubTokenForActiveRun(
+      agent.owner_ref,
+      agent.harness,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ token });
+  });
+
   router.get('/me/credentials', async (req, res) => {
     res.json(await credentials.summary(await ownerOf(req)));
   });

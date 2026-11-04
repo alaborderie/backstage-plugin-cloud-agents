@@ -31,6 +31,15 @@ export interface Config {
       /** Default `https://api.github.com`. */
       apiBaseUrl?: string;
     };
+    /**
+     * The Backstage backend as runner pods reach it inside the cluster, for
+     * example `http://backstage.default.svc.cluster.local`. Pods then fetch
+     * the current GitHub token of their run from
+     * `<runnerBackendUrl>/api/cloud-agents/runner/github-token`. Falls back to
+     * env CLOUD_AGENTS_RUNNER_BACKEND_URL. Without it, a pod keeps the
+     * `GH_TOKEN` it started with.
+     */
+    runnerBackendUrl?: string;
     /** How often a follower checks a pending pod, in ms. Default 2000. */
     pollIntervalMs?: number;
     /** Maximum wait for a runner container to start, in ms. Default 120000. */

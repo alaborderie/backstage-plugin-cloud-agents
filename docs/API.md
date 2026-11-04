@@ -141,6 +141,31 @@ These routes are additive. Clients of the contract above do not need them.
 - `DELETE /me/credentials/github` disconnects GitHub, whichever way it was
   connected.
 
+## Additions: runner credential endpoint
+
+This route is for runner pods. Clients of the contract above do not call it.
+
+- `GET /runner/github-token` with `Authorization: Bearer <CLOUD_AGENT_RUN_TOKEN>`
+  answers `200 {"token": "<GitHub token>"}` with `Cache-Control: no-store`.
+  The token is the run owner's current GitHub token. The plugin refreshes a
+  GitHub App user token first when it expires within 10 minutes.
+- Each run gets a random credential token in its Secret as
+  `CLOUD_AGENT_RUN_TOKEN`. The plugin stores only its SHA-256 hash and never
+  logs it.
+- The route answers `401` without a token, for an unknown token, for a `cat_`
+  access token, and once the run is no longer active (it succeeded, failed,
+  needs input, or stopped).
+- It answers `422 missing_credential` when the owner's GitHub credential is
+  gone or can no longer be refreshed.
+- The pod finds the route through `CLOUD_AGENT_GH_TOKEN_URL`, which the plugin
+  sets to `<cloudAgents.runnerBackendUrl>/api/cloud-agents/runner/github-token`
+  when that config key is set.
+
+A run start no longer refreshes the GitHub token every time. It refreshes the
+token only when it would expire before the run's `activeDeadlineSeconds` plus
+10 minutes, or when GitHub rejects it, one refresh at a time per user. The
+Secret's `GH_TOKEN` is unchanged otherwise.
+
 ## Implementation notes
 
 What the plugin does where the contract leaves room. Each item only adds a

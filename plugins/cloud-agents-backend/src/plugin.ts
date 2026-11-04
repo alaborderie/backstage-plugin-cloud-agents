@@ -64,6 +64,7 @@ export const cloudAgentsPlugin = createBackendPlugin({
           new CredentialCipher(settings.encryptionKey),
           github,
           logger,
+          settings.job.activeDeadlineSeconds * 1000,
         );
         const cluster = new Cluster(kubeConfig, settings);
         const agents = new AgentService(
