@@ -11,6 +11,7 @@ import { resolve } from 'node:path';
 import {
   KubeConfig,
   type V1Job,
+  type CoreV1Event,
   type V1Pod,
   type V1Secret,
 } from '@kubernetes/client-node';
@@ -61,6 +62,10 @@ export class FakeKube {
   readonly secrets = new Map<string, V1Secret>();
   readonly pods = new Map<string, FakePod>();
   readonly requests: string[] = [];
+  readonly events: CoreV1Event[] = [];
+  /** HTTP method and path -> Kubernetes Status response. */
+  readonly refusals = new Map<string, { code: number; message: string }>();
+  podStartup: 'running' | 'missing' | 'unschedulable' = 'running';
   private server: Server | undefined;
   private uid = 0;
   /** Chooses the script of the next pod. */
@@ -145,6 +150,38 @@ export class FakeKube {
   ): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://fake');
     this.requests.push(`${req.method} ${url.pathname}`);
+    const request = `${req.method} ${url.pathname}`;
+    const refusal = [...this.refusals].find(([path]) => {
+      const [prefix, suffix] = path.split('*');
+      return suffix === undefined
+        ? request === path
+        : request.startsWith(prefix!) && request.endsWith(suffix);
+    })?.[1];
+    if (refusal) {
+      this.json(res, refusal.code, { kind: 'Status', ...refusal });
+      return;
+    }
+    if (
+      /^\/api\/v1\/namespaces\/[^/]+\/events$/.test(url.pathname) &&
+      req.method === 'GET'
+    ) {
+      const selectors = (url.searchParams.get('fieldSelector') ?? '').split(
+        ',',
+      );
+      const items = this.events.filter(event =>
+        selectors.every(selector => {
+          const [key, value] = selector.split('=');
+          if (key === 'reason') return event.reason === value;
+          if (key === 'involvedObject.kind')
+            return event.involvedObject.kind === value;
+          if (key === 'involvedObject.name')
+            return event.involvedObject.name === value;
+          return false;
+        }),
+      );
+      this.json(res, 200, { kind: 'EventList', items });
+      return;
+    }
     const job =
       /^\/apis\/batch\/v1\/namespaces\/([^/]+)\/jobs(?:\/([^/]+))?$/.exec(
         url.pathname,
@@ -261,6 +298,7 @@ export class FakeKube {
   }
 
   private startPod(job: V1Job): void {
+    if (this.podStartup === 'missing') return;
     const labels = job.spec!.template.metadata!.labels!;
     const runId = labels['cloud-agents/run-id']!;
     if (this.podOfRun(runId)) return;
@@ -296,6 +334,20 @@ export class FakeKube {
       events: new EventEmitter(),
     };
     this.pods.set(name, fake);
+    if (this.podStartup === 'unschedulable') {
+      fake.pod.status = {
+        phase: 'Pending',
+        conditions: [
+          {
+            type: 'PodScheduled',
+            status: 'False',
+            reason: 'Unschedulable',
+            message: '0/1 nodes are available: 1 Insufficient memory.',
+          },
+        ],
+      };
+      return;
+    }
     this.tick(fake);
   }
 

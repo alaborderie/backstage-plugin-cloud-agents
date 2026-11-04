@@ -56,23 +56,24 @@ These steps assume the new backend system and the new frontend system, as in a B
 
 The plugin reads app-config first and falls back to the environment variable in the second column.
 
-| app-config key                            | Environment variable          | Default                                                 | Meaning                                                                                                                                             |
-| ----------------------------------------- | ----------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cloudAgents.namespace`                   | `CLOUD_AGENTS_NAMESPACE`      | `cloud-agents`                                          | The namespace for agent Jobs and Secrets.                                                                                                           |
-| `cloudAgents.runnerImage`                 | `CLOUD_AGENTS_RUNNER_IMAGE`   | required                                                | The runner image, for example `ghcr.io/alaborderie/cloud-agent-runner:sha-de01b1b`.                                                                 |
-| `cloudAgents.encryptionKey`               | `CLOUD_AGENTS_ENCRYPTION_KEY` | required                                                | Base64 of 32 random bytes (`openssl rand -base64 32`). The AES-256-GCM key for stored credentials. Changing it makes stored credentials unreadable. |
-| `cloudAgents.github.clientId`             | `AUTH_GITHUB_CLIENT_ID`       | none                                                    | The GitHub App's client ID for `/me/github/connect`. Without the ID and secret, users paste a token instead.                                        |
-| `cloudAgents.github.clientSecret`         | `AUTH_GITHUB_CLIENT_SECRET`   | none                                                    | The GitHub App's client secret.                                                                                                                     |
-| `cloudAgents.github.webBaseUrl`           |                               | `https://github.com`                                    | For GitHub Enterprise Server.                                                                                                                       |
-| `cloudAgents.github.apiBaseUrl`           |                               | `https://api.github.com`                                | For GitHub Enterprise Server.                                                                                                                       |
-| `cloudAgents.tiers.<name>`                |                               | see below                                               | `{harness, model, effort}` presets for `POST /agents` `tier`. The frontend reads them too.                                                          |
-| `cloudAgents.job.activeDeadlineSeconds`   |                               | `14400`                                                 | The Job's time limit.                                                                                                                               |
-| `cloudAgents.job.ttlSecondsAfterFinished` |                               | `3600`                                                  | How long Kubernetes keeps a finished Job and its pod.                                                                                               |
-| `cloudAgents.job.resources`               |                               | requests `cpu: 500m, memory: 1Gi`, limits `memory: 4Gi` | The runner container's resources.                                                                                                                   |
-| `cloudAgents.job.serviceAccountName`      |                               | none                                                    | The pod's ServiceAccount. Without one, the pod gets no API token.                                                                                   |
-| `cloudAgents.job.imagePullSecrets`        |                               | `[]`                                                    | Pull secrets for a private runner image.                                                                                                            |
-| `cloudAgents.job.nodeSelector`            |                               | none                                                    | A node selector for agent pods.                                                                                                                     |
-| `cloudAgents.pollIntervalMs`              |                               | `2000`                                                  | How often a follower checks a pending pod.                                                                                                          |
+| app-config key                            | Environment variable          | Default                                                           | Meaning                                                                                                                                             |
+| ----------------------------------------- | ----------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cloudAgents.namespace`                   | `CLOUD_AGENTS_NAMESPACE`      | `cloud-agents`                                                    | The namespace for agent Jobs and Secrets.                                                                                                           |
+| `cloudAgents.runnerImage`                 | `CLOUD_AGENTS_RUNNER_IMAGE`   | required                                                          | The runner image, for example `ghcr.io/alaborderie/cloud-agent-runner:sha-de01b1b`.                                                                 |
+| `cloudAgents.encryptionKey`               | `CLOUD_AGENTS_ENCRYPTION_KEY` | required                                                          | Base64 of 32 random bytes (`openssl rand -base64 32`). The AES-256-GCM key for stored credentials. Changing it makes stored credentials unreadable. |
+| `cloudAgents.github.clientId`             | `AUTH_GITHUB_CLIENT_ID`       | none                                                              | The GitHub App's client ID for `/me/github/connect`. Without the ID and secret, users paste a token instead.                                        |
+| `cloudAgents.github.clientSecret`         | `AUTH_GITHUB_CLIENT_SECRET`   | none                                                              | The GitHub App's client secret.                                                                                                                     |
+| `cloudAgents.github.webBaseUrl`           |                               | `https://github.com`                                              | For GitHub Enterprise Server.                                                                                                                       |
+| `cloudAgents.github.apiBaseUrl`           |                               | `https://api.github.com`                                          | For GitHub Enterprise Server.                                                                                                                       |
+| `cloudAgents.tiers.<name>`                |                               | see below                                                         | `{harness, model, effort}` presets for `POST /agents` `tier`. The frontend reads them too.                                                          |
+| `cloudAgents.job.activeDeadlineSeconds`   |                               | `14400`                                                           | The Job's time limit.                                                                                                                               |
+| `cloudAgents.job.ttlSecondsAfterFinished` |                               | `3600`                                                            | How long Kubernetes keeps a finished Job and its pod.                                                                                               |
+| `cloudAgents.job.resources`               |                               | requests `cpu: 500m, memory: 512Mi`, limits `cpu: 1, memory: 2Gi` | The runner container's resources.                                                                                                                   |
+| `cloudAgents.job.serviceAccountName`      |                               | none                                                              | The pod's ServiceAccount. Without one, the pod gets no API token.                                                                                   |
+| `cloudAgents.job.imagePullSecrets`        |                               | `[]`                                                              | Pull secrets for a private runner image.                                                                                                            |
+| `cloudAgents.job.nodeSelector`            |                               | none                                                              | A node selector for agent pods.                                                                                                                     |
+| `cloudAgents.podStartTimeoutMs`           |                               | `120000`                                                          | Maximum wait for a runner container to start.                                                                                                       |
+| `cloudAgents.pollIntervalMs`              |                               | `2000`                                                            | How often a follower checks a pending pod.                                                                                                          |
 
 The plugin also reads `app.baseUrl` (the GitHub callback returns the browser to `<app.baseUrl>/cloud-agents/settings`) and `backend.baseUrl` (the callback URL). It uses the Backstage database service, so it gets its own database or schema in the app's Postgres, and its migrations run at startup.
 
@@ -91,9 +92,9 @@ cloudAgents:
     opus: { harness: claude, model: claude-opus-5-5, effort: high }
 ```
 
-### Give Backstage access to the namespace
+## Kubernetes requirements
 
-The plugin loads the Kubernetes client configuration the standard way: `KUBECONFIG`, then `~/.kube/config`, then the in-cluster ServiceAccount. In a cluster, give Backstage's ServiceAccount this Role in the agents namespace only:
+The agents namespace and Backstage's ServiceAccount must already exist. The plugin loads `KUBECONFIG`, then `~/.kube/config`, then the in-cluster ServiceAccount. Save the following as `cloud-agents-rbac.yaml` and run `kubectl apply -f cloud-agents-rbac.yaml`. Change the namespace and subject to match your installation. This grants the exact operations in `plugins/cloud-agents-backend/src/kube.ts`.
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -104,13 +105,19 @@ metadata:
 rules:
   - apiGroups: [batch]
     resources: [jobs]
-    verbs: [create, get, list, watch, patch, delete]
+    verbs: [create, get, patch, delete]
   - apiGroups: ['']
-    resources: [pods, pods/log]
-    verbs: [get, list, watch]
+    resources: [pods]
+    verbs: [list]
+  - apiGroups: ['']
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: ['']
+    resources: [events]
+    verbs: [list]
   - apiGroups: ['']
     resources: [secrets]
-    verbs: [create, get, delete]
+    verbs: [create]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -127,7 +134,60 @@ subjects:
     namespace: backstage
 ```
 
-### Connect GitHub through a GitHub App
+`patch jobs` resumes the suspended Job after the per-run Secret exists. The Job controller creates pods. Kubernetes garbage-collects owned Secrets. The backend does not need permissions to create pods or read or delete Secrets. `list events` reads `FailedCreate` admission failures for a Job. Following logs uses `get pods/log`, without a `watch` verb.
+
+Each runner container defaults to these resources:
+
+```yaml
+cloudAgents:
+  job:
+    resources:
+      requests:
+        cpu: '500m'
+        memory: '512Mi'
+      limits:
+        cpu: '1'
+        memory: '2Gi'
+```
+
+Override these values in your app-config. Each nonempty `requests` or `limits` map replaces that entire default map, so set both CPU and memory when you need both. Backstage's config loader also accepts the same values through `APP_CONFIG_` environment variables. Quote each quantity as a JSON string so CPU `1` remains a string:
+
+```sh
+export APP_CONFIG_cloudAgents_job_resources_requests_cpu='"500m"'
+export APP_CONFIG_cloudAgents_job_resources_requests_memory='"512Mi"'
+export APP_CONFIG_cloudAgents_job_resources_limits_cpu='"1"'
+export APP_CONFIG_cloudAgents_job_resources_limits_memory='"2Gi"'
+```
+
+The namespace's LimitRange and ResourceQuota must admit these requests and limits, including the aggregate resources of concurrent runs. A quota on Jobs or Secrets must also leave room for each run. Defaults cannot satisfy every cluster's policy. Adjust the resources or the namespace policy before starting agents.
+
+A Kubernetes refusal fails the run and includes the operation, namespace, and API rejection in its `agent.status` event. Job `FailedCreate` events include the admission message, such as a LimitRange or quota violation. If no pod appears or the runner container stays pending for `cloudAgents.podStartTimeoutMs` (default 120000), the run fails with the latest pod waiting or scheduler message when available. The plugin deletes the Job on startup failure so a queued pod cannot start later. Increase this timeout for slow image pulls or scheduling. The follower retries transient API outages and rate limits.
+
+### Verify with the restricted Role
+
+Use a local test cluster. With its administrator kubeconfig selected, create the namespaces and ServiceAccount once:
+
+```sh
+kubectl create namespace cloud-agents
+kubectl create namespace backstage
+kubectl -n backstage create serviceaccount backstage
+kubectl apply -f cloud-agents-rbac.yaml
+node plugins/.claude/skills/verify-cloud-agents-plugin/scripts/service-account-kubeconfig.mjs /tmp/cloud-agents-sa.json
+export KUBECONFIG=/tmp/cloud-agents-sa.json
+```
+
+The helper reads only the administrator's cluster connection and requests a one-hour token for `backstage/backstage`. It writes a new kubeconfig with only that token and file mode `0600`. It never changes your administrator kubeconfig. Run it again with a new output path when the token expires.
+
+Start the dev backend with this `KUBECONFIG` using step 3 in [Develop](#develop). In the e2e shell, select the same file and run:
+
+```sh
+export KUBECONFIG=/tmp/cloud-agents-sa.json
+VERIFY_KUBE_RBAC=1 plugins/.claude/skills/verify-cloud-agents-plugin/scripts/e2e.sh /tmp/plugin-e2e
+```
+
+This mode uses [`kubectl auth can-i`](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_auth/kubectl_auth_can-i/) to check each permission in the Role and rejects broader permissions to list Jobs or read Secrets before launching an agent. The backend restart check inherits the same kubeconfig. The initial backend must also use this file. Keep administrator-only setup and cleanup in a separate shell.
+
+## Connect GitHub through a GitHub App
 
 Users can paste a GitHub token on the settings page. To offer **Connect with GitHub** instead, use a GitHub App with "Expire user authorization tokens" on:
 

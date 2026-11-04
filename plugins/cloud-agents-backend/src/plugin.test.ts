@@ -62,7 +62,7 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
   let backend: TestBackend;
   let baseUrl: string;
 
-  async function start(githubApp = false) {
+  async function start(githubApp = false, podStartTimeoutMs = 120_000) {
     ({ backend, baseUrl } = await startPluginBackend({
       knex,
       kube,
@@ -70,6 +70,7 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
       githubUrl: github.url,
       logs,
       githubApp,
+      podStartTimeoutMs,
     }));
   }
 
@@ -217,6 +218,172 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
     });
     expect(kube.jobs.size).toBe(0);
   });
+
+  it.each([
+    ['POST /apis/batch/v1/namespaces/agents-test/jobs', 'create jobs', false],
+    ['PATCH /apis/batch/v1/namespaces/agents-test/jobs/*', 'patch jobs', false],
+    ['POST /api/v1/namespaces/agents-test/secrets', 'create secrets', false],
+    ['GET /api/v1/namespaces/agents-test/pods', 'list pods', false],
+    ['GET /apis/batch/v1/namespaces/agents-test/jobs/*', 'get jobs', true],
+    ['GET /api/v1/namespaces/agents-test/events', 'list events', true],
+    ['GET /api/v1/namespaces/agents-test/pods/*/log', 'get pods/log', false],
+  ])(
+    'fails the run and its event stream when Kubernetes refuses %s',
+    async (path, operation, missingPod) => {
+      await setCredentials();
+      if (missingPod) kube.podStartup = 'missing';
+      kube.refusals.set(String(path), {
+        code: 403,
+        message: 'Forbidden by namespace Role',
+      });
+      const { body: created } = await api('POST', '/agents', {
+        repo: 'acme/app',
+        prompt: 'do it',
+        tier: 'flash',
+      });
+      const stream = await readSse(`${baseUrl}/agents/${created.id}/events`, {
+        Authorization: ALICE,
+      });
+      expect(stream.closedByServer).toBe(true);
+      const failed = await agentWhen(created.id, a => a.status === 'failed');
+      expect(failed.runs[0]?.status).toBe('failed');
+      expect(stream.messages.at(-1)?.data.event).toMatchObject({
+        type: 'agent.status',
+        status: 'failed',
+        error: expect.stringContaining(
+          `${operation} in namespace agents-test refused (HTTP 403)`,
+        ),
+      });
+      expect(stream.raw).toContain(String(operation));
+      expect(kube.jobs.size).toBe(0);
+    },
+  );
+
+  it('reports a refused Job deletion when stopping a run', async () => {
+    await setCredentials();
+    kube.script = () => ({
+      lines: recordedStream('opencode'),
+      holdAt: 1,
+      exitCode: 0,
+    });
+    const { body: created } = await api('POST', '/agents', {
+      repo: 'acme/app',
+      prompt: 'do it',
+      tier: 'flash',
+    });
+    await agentWhen(created.id, a => a.status === 'running');
+    kube.refusals.set('DELETE /apis/batch/v1/namespaces/agents-test/jobs/*', {
+      code: 403,
+      message: 'cannot delete resource jobs',
+    });
+    await api('POST', `/agents/${created.id}/stop`);
+    const stream = await readSse(`${baseUrl}/agents/${created.id}/events`, {
+      Authorization: ALICE,
+    });
+    expect(stream.closedByServer).toBe(true);
+    expect(stream.messages.at(-1)?.data.event).toMatchObject({
+      type: 'agent.status',
+      status: 'failed',
+      error: expect.stringContaining('delete jobs'),
+    });
+    expect(stream.raw).toContain('cannot delete resource jobs');
+  });
+
+  it('reports a refused Job creation with the API rejection in the event stream', async () => {
+    await setCredentials();
+    const message =
+      'Job is invalid: spec.template.spec.containers[0].resources: Invalid value';
+    kube.refusals.set('POST /apis/batch/v1/namespaces/agents-test/jobs', {
+      code: 422,
+      message,
+    });
+    const { body: created } = await api('POST', '/agents', {
+      repo: 'acme/app',
+      prompt: 'do it',
+      tier: 'flash',
+    });
+    const stream = await readSse(`${baseUrl}/agents/${created.id}/events`, {
+      Authorization: ALICE,
+    });
+    expect(stream.closedByServer).toBe(true);
+    expect(stream.raw).toContain(message);
+    expect(stream.messages.at(-1)?.data.event).toMatchObject({
+      type: 'agent.status',
+      status: 'failed',
+      error: expect.stringContaining('create jobs'),
+    });
+    await agentWhen(created.id, a => a.status === 'failed');
+  });
+
+  it('reports FailedCreate admission events before the startup timeout', async () => {
+    await setCredentials();
+    kube.podStartup = 'missing';
+    const { body: created } = await api('POST', '/agents', {
+      repo: 'acme/app',
+      prompt: 'do it',
+      tier: 'flash',
+    });
+    const job = [...kube.jobs.keys()][0]!;
+    const message =
+      'maximum memory usage per Container is 2Gi, but limit is 4Gi';
+    kube.events.push(
+      {
+        metadata: {},
+        involvedObject: { kind: 'Job', name: 'another-job' },
+        reason: 'FailedCreate',
+        message: 'unrelated failure',
+      },
+      {
+        metadata: {},
+        involvedObject: { kind: 'Job', name: job },
+        reason: 'FailedCreate',
+        message,
+      },
+    );
+    const stream = await readSse(`${baseUrl}/agents/${created.id}/events`, {
+      Authorization: ALICE,
+    });
+    expect(stream.closedByServer).toBe(true);
+    expect(stream.raw).toContain(message);
+    expect(stream.raw).not.toContain('unrelated failure');
+    expect(stream.messages.at(-1)?.data.event).toMatchObject({
+      type: 'agent.status',
+      status: 'failed',
+      error: expect.stringContaining(message),
+    });
+    await agentWhen(created.id, a => a.status === 'failed');
+    expect(kube.jobs.size).toBe(0);
+  });
+
+  it.each(['missing', 'unschedulable'] as const)(
+    'fails a %s pod after the startup timeout',
+    async startup => {
+      await backend.stop();
+      await start(false, 150);
+      await setCredentials();
+      kube.podStartup = startup;
+      const { body: created } = await api('POST', '/agents', {
+        repo: 'acme/app',
+        prompt: 'do it',
+        tier: 'flash',
+      });
+      const stream = await readSse(`${baseUrl}/agents/${created.id}/events`, {
+        Authorization: ALICE,
+      });
+      expect(stream.closedByServer).toBe(true);
+      const failed = await agentWhen(created.id, a => a.status === 'failed');
+      const reason =
+        startup === 'missing' ? 'no pod was created' : 'Insufficient memory';
+      expect(failed.runs[0]?.status).toBe('failed');
+      expect(stream.messages.at(-1)?.data.event).toMatchObject({
+        type: 'agent.status',
+        status: 'failed',
+        error: expect.stringContaining(reason),
+      });
+      expect(stream.raw).toContain(reason);
+      expect(kube.jobs.size).toBe(0);
+    },
+  );
 
   it('runs an agent end to end and replays its stream from Last-Event-ID', async () => {
     await setCredentials();

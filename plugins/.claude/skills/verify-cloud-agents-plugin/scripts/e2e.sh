@@ -21,6 +21,24 @@ api="$base/api/cloud-agents"
 mkdir -p "$out"
 umask 077
 
+if [ "${VERIFY_KUBE_RBAC:-}" = 1 ]; then
+  : "${KUBECONFIG:?Set KUBECONFIG to the ServiceAccount kubeconfig used by the backend}"
+  ns="${CLOUD_AGENTS_NAMESPACE:-cloud-agents}"
+  for permission in 'create jobs.batch' 'get jobs.batch' 'patch jobs.batch' 'delete jobs.batch' 'create secrets' 'list pods' 'list events'; do
+    read -r verb resource <<< "$permission"
+    kubectl -n "$ns" auth can-i "$verb" "$resource" --quiet || { echo "missing $permission in $ns" >&2; exit 1; }
+  done
+  kubectl -n "$ns" auth can-i get pods --subresource=log --quiet || { echo "missing get pods/log in $ns" >&2; exit 1; }
+  for permission in 'list jobs.batch' 'get secrets'; do
+    read -r verb resource <<< "$permission"
+    if kubectl -n "$ns" auth can-i "$verb" "$resource" --quiet; then
+      echo "verification requires restricted access; unexpectedly allowed $permission in $ns" >&2
+      exit 1
+    fi
+  done
+  echo "ok: ServiceAccount permissions match the README Role checks"
+fi
+
 OPENCODE_API_KEY="${OPENCODE_API_KEY:-$(opencode auth export 2>/dev/null | jq -r '[.[] | select(.integrationID=="opencode-go" and .active)][0].value.key')}"
 GH_TOKEN="${GH_TOKEN:-$(gh auth token)}"
 [ -n "$OPENCODE_API_KEY" ] && [ "$OPENCODE_API_KEY" != null ] || { echo "no OpenCode Go key" >&2; exit 1; }

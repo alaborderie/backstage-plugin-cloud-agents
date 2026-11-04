@@ -1,13 +1,15 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { LoggerService } from '@backstage/backend-plugin-api';
 import { outcomeOfExitCode, type AgentService } from './agents';
-import type { Cluster } from './kube';
+import { KubernetesRefusal, type Cluster } from './kube';
 import { parseRunnerLine } from './runnerEvents';
 import type { RunRow, Store } from './store';
 
 export interface FollowerOptions {
   /** How long to wait between pod checks while a pod is pending. */
   pollIntervalMs: number;
+  /** Maximum wait for the runner container to start. */
+  podStartTimeoutMs: number;
 }
 
 /**
@@ -76,6 +78,25 @@ export class Followers {
             );
             return;
           }
+          const rejection = !pod
+            ? await this.cluster.jobRejection(run.job_name)
+            : undefined;
+          const timedOut =
+            Date.now() - Date.parse(run.started_at) >=
+            this.options.podStartTimeoutMs;
+          if (rejection || timedOut) {
+            await this.finishWithout(
+              run,
+              rejection ??
+                `Job ${run.job_name}: runner did not start within ${
+                  this.options.podStartTimeoutMs
+                }ms: ${
+                  pod?.reason ??
+                  'no pod was created; check namespace LimitRange, ResourceQuota, and Job events'
+                }`,
+            );
+            return;
+          }
           await sleep(this.options.pollIntervalMs, undefined, { signal });
           continue;
         }
@@ -126,6 +147,10 @@ export class Followers {
         }
       } catch (error) {
         if (signal.aborted) return;
+        if (error instanceof KubernetesRefusal) {
+          await this.finishWithout(run, error.message);
+          return;
+        }
         failures += 1;
         this.logger.warn(
           `Run ${run.id}: ${(error as Error).message}; retrying (${failures})`,
@@ -140,6 +165,12 @@ export class Followers {
   }
 
   private async finishWithout(run: RunRow, reason: string): Promise<void> {
+    // A queued pod must not start later after the run has already failed.
+    await this.cluster.deleteJob(run.job_name).catch(error => {
+      this.logger.warn(
+        `Could not clean up Job ${run.job_name}: ${(error as Error).message}`,
+      );
+    });
     const stopped = await this.agents.isStopRequested(run.agent_id);
     await this.agents.finishRun(run.id, {
       status: stopped ? 'stopped' : 'failed',

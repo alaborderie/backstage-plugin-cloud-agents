@@ -125,6 +125,7 @@ export async function startPluginBackend(options: {
   githubUrl: string;
   logs: CapturedLogs;
   githubApp?: boolean;
+  podStartTimeoutMs?: number;
 }): Promise<{ backend: TestBackend; baseUrl: string }> {
   const dir = mkdtempSync(join(tmpdir(), 'cloud-agents-'));
   const kubeconfigPath = join(dir, 'kubeconfig');
@@ -152,6 +153,7 @@ export async function startPluginBackend(options: {
             runnerImage: 'runner:test',
             encryptionKey: ENCRYPTION_KEY,
             pollIntervalMs: 20,
+            podStartTimeoutMs: options.podStartTimeoutMs ?? 120_000,
             github: {
               apiBaseUrl: options.githubUrl,
               ...(options.githubApp && {

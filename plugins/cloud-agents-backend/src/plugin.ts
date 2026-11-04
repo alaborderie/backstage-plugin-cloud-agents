@@ -74,6 +74,9 @@ export const cloudAgentsPlugin = createBackendPlugin({
           logger,
         );
         const followers = new Followers(store, agents, cluster, logger, {
+          podStartTimeoutMs:
+            config.getOptionalNumber('cloudAgents.podStartTimeoutMs') ??
+            120_000,
           pollIntervalMs:
             config.getOptionalNumber('cloudAgents.pollIntervalMs') ?? 2000,
         });
