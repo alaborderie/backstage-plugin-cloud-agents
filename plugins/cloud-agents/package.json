@@ -52,7 +52,6 @@
   "devDependencies": {
     "@backstage/cli": "^0.36.7",
     "@backstage/frontend-defaults": "^0.5.7",
-    "@backstage/frontend-dev-utils": "^0.1.7",
     "@backstage/frontend-test-utils": "^0.6.5",
     "@backstage/plugin-app-react": "^0.2.8",
     "@backstage/test-utils": "^1.7.23",

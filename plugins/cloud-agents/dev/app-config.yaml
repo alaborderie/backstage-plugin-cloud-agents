@@ -1,0 +1,7 @@
+# Dev app for the cloud-agents frontend. Start the dev backend first
+# (`yarn start:backend`), then `yarn start:frontend`, and sign in as guest.
+app:
+  title: Cloud agents (dev)
+  baseUrl: http://localhost:3000
+backend:
+  baseUrl: http://localhost:7007
