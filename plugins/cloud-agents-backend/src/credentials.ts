@@ -8,7 +8,7 @@ import type {
 } from '@alaborderie/plugin-cloud-agents-common';
 import type { CredentialCipher } from './crypto';
 import type { GithubClient, GithubTokens } from './github';
-import { nowIso, type Store } from './store';
+import { nowIso, type Db, type Store } from './store';
 
 /** A credential the user has not set, or that no longer works. */
 export class MissingCredentialError extends Error {
@@ -59,8 +59,11 @@ const HARNESS_CREDENTIAL: Record<
   }),
 };
 
-/** Refresh a GitHub user token when it has less than this left. */
-const GITHUB_MIN_LIFETIME_MS = 60 * 60 * 1000;
+/**
+ * The least time left on a GitHub user token the plugin hands out. A run start
+ * also needs the token to outlast the run.
+ */
+const GITHUB_MIN_LIFETIME_MS = 10 * 60 * 1000;
 
 /**
  * Per-user credentials, sealed with AES-256-GCM. Values go in through `put*`
@@ -72,6 +75,8 @@ export class CredentialService {
     private readonly cipher: CredentialCipher,
     private readonly github: GithubClient,
     private readonly logger: LoggerService,
+    /** A run's `activeDeadlineSeconds`, in ms. */
+    private readonly runLifetimeMs: number,
   ) {}
 
   private aad(owner: string, name: CredentialName): string {
@@ -180,58 +185,88 @@ export class CredentialService {
       value,
       JSON.parse(row.meta) as HarnessMeta,
     );
-    const ghToken = await this.githubTokenForRun(owner, harness);
+    const ghToken = await this.githubToken(
+      owner,
+      harness,
+      this.runLifetimeMs + GITHUB_MIN_LIFETIME_MS,
+      true,
+    );
     return { ...material, env: { ...material.env, GH_TOKEN: ghToken } };
   }
 
+  githubTokenForActiveRun(owner: string, harness: Harness): Promise<string> {
+    return this.githubToken(owner, harness, GITHUB_MIN_LIFETIME_MS, false);
+  }
+
   /**
-   * A GitHub App user token lasts 8 hours, so each run starts with a fresh one
-   * from the stored refresh token. A pasted token is used as is.
+   * GitHub invalidates a GitHub App user token when it is refreshed, and other
+   * runs of the user may hold it. So a refresh happens only when the token
+   * would expire within `minLifetimeMs`, or when GitHub rejects it, and only
+   * under the lock on the user's `github` row: concurrent callers wait, then
+   * reuse the token the first one stored. A pasted token is used as is.
    */
-  private async githubTokenForRun(
+  private githubToken(
     owner: string,
     harness: Harness,
+    minLifetimeMs: number,
+    checkWithGithub: boolean,
   ): Promise<string> {
-    const row = await this.store.getCredential(owner, 'github');
-    if (!row) throw new MissingCredentialError(harness, 'github');
-    const stored = JSON.parse(
-      this.cipher.open(row.sealed, this.aad(owner, 'github')),
-    ) as StoredGithub;
-    if (stored.method === 'token' || !stored.refreshToken || !this.github.app) {
-      return stored.accessToken;
-    }
-    try {
-      const refreshed = await this.github.refresh(stored.refreshToken);
-      const meta = JSON.parse(row.meta) as GithubMeta;
-      await this.writeGithub(
-        owner,
-        { method: 'oauth', ...refreshed },
-        meta.login,
-      );
-      return refreshed.accessToken;
-    } catch (error) {
+    return this.store.transaction(async tx => {
+      const row = await this.store.getCredential(owner, 'github', tx, {
+        forUpdate: true,
+      });
+      if (!row) throw new MissingCredentialError(harness, 'github');
+      const stored = JSON.parse(
+        this.cipher.open(row.sealed, this.aad(owner, 'github')),
+      ) as StoredGithub;
+      if (
+        stored.method === 'token' ||
+        !stored.refreshToken ||
+        !this.github.app
+      ) {
+        return stored.accessToken;
+      }
       const expires = stored.accessTokenExpiresAt
         ? Date.parse(stored.accessTokenExpiresAt)
         : Infinity;
-      this.logger.warn(
-        `Could not refresh the GitHub token of ${owner}: ${
-          (error as Error).message
-        }`,
-      );
-      if (expires - Date.now() > GITHUB_MIN_LIFETIME_MS) {
-        return stored.accessToken;
+      const lasts = (ms: number) => expires - Date.now() > ms;
+      const rejected =
+        lasts(minLifetimeMs) &&
+        checkWithGithub &&
+        (await this.github.rejects(stored.accessToken).catch(() => false));
+      if (lasts(minLifetimeMs) && !rejected) return stored.accessToken;
+      try {
+        const refreshed = await this.github.refresh(stored.refreshToken);
+        const meta = JSON.parse(row.meta) as GithubMeta;
+        await this.writeGithub(
+          owner,
+          { method: 'oauth', ...refreshed },
+          meta.login,
+          tx,
+        );
+        return refreshed.accessToken;
+      } catch (error) {
+        this.logger.warn(
+          `Could not refresh the GitHub token of ${owner}: ${
+            (error as Error).message
+          }`,
+        );
+        if (!rejected && lasts(GITHUB_MIN_LIFETIME_MS)) {
+          return stored.accessToken;
+        }
+        throw new MissingCredentialError(harness, 'github');
       }
-      throw new MissingCredentialError(harness, 'github');
-    }
+    });
   }
 
   private async writeGithub(
     owner: string,
     stored: StoredGithub,
     login: string,
+    db?: Db,
   ): Promise<void> {
     const meta: GithubMeta = { login, method: stored.method };
-    await this.write(owner, 'github', JSON.stringify(stored), meta);
+    await this.write(owner, 'github', JSON.stringify(stored), meta, db);
   }
 
   private async write(
@@ -239,14 +274,18 @@ export class CredentialService {
     name: CredentialName,
     value: string,
     meta: object,
+    db?: Db,
   ): Promise<void> {
-    await this.store.putCredential({
-      owner_ref: owner,
-      name,
-      sealed: this.cipher.seal(value, this.aad(owner, name)),
-      meta: JSON.stringify(meta),
-      updated_at: nowIso(),
-    });
+    await this.store.putCredential(
+      {
+        owner_ref: owner,
+        name,
+        sealed: this.cipher.seal(value, this.aad(owner, name)),
+        meta: JSON.stringify(meta),
+        updated_at: nowIso(),
+      },
+      db,
+    );
     this.logger.info(`Stored the ${name} credential of ${owner}`);
   }
 }

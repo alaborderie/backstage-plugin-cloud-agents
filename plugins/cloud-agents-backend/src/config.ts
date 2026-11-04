@@ -39,6 +39,12 @@ export interface CloudAgentsConfig {
   settingsPageUrl: string;
   /** The callback URL registered on the GitHub App. */
   githubCallbackUrl: string;
+  /**
+   * Where a runner pod fetches the current GitHub token of its run, through
+   * `cloudAgents.runnerBackendUrl`. `undefined` when that is not set: the pod
+   * then uses the `GH_TOKEN` it started with.
+   */
+  runnerGithubTokenUrl: string | undefined;
 }
 
 type Env = Record<string, string | undefined>;
@@ -165,6 +171,12 @@ export function readCloudAgentsConfig(
     'https://api.github.com';
   const appBaseUrl = config.getString('app.baseUrl').replace(/\/$/, '');
   const backendBaseUrl = config.getString('backend.baseUrl').replace(/\/$/, '');
+  const runnerBackendUrl = readString(
+    config,
+    'cloudAgents.runnerBackendUrl',
+    env,
+    'CLOUD_AGENTS_RUNNER_BACKEND_URL',
+  )?.replace(/\/$/, '');
 
   return {
     namespace:
@@ -192,5 +204,8 @@ export function readCloudAgentsConfig(
     job: readJob(config),
     settingsPageUrl: `${appBaseUrl}/cloud-agents/settings`,
     githubCallbackUrl: `${backendBaseUrl}/api/cloud-agents/me/github/callback`,
+    runnerGithubTokenUrl: runnerBackendUrl
+      ? `${runnerBackendUrl}/api/cloud-agents/runner/github-token`
+      : undefined,
   };
 }

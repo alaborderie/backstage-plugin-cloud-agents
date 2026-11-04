@@ -43,6 +43,7 @@ RUN ln -s /opt/cloud-agent/bin/cloud-agent /usr/local/bin/cloud-agent
 
 USER agent
 ENV HOME=/home/agent \
+    PATH=/opt/cloud-agent/bin:$PATH \
     CLAUDE_PLUGINS_DIR=/opt/claude-plugins \
     CLAUDE_PLUGINS_REF=main \
     CLOUD_AGENT_VERSION=${CLOUD_AGENT_VERSION} \

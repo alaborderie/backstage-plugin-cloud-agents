@@ -1,0 +1,7 @@
+#!/bin/sh
+# gh with the run's current GitHub token, which the plugin may have refreshed since GH_TOKEN was set.
+if [ -n "${CLOUD_AGENT_GH_TOKEN_URL:-}" ] && [ -n "${CLOUD_AGENT_RUN_TOKEN:-}" ] && token="$(cloud-agent github-token)"; then
+  GH_TOKEN="$token"
+  export GH_TOKEN
+fi
+exec /usr/local/bin/gh "$@"

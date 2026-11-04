@@ -151,7 +151,7 @@ Claude Code sends a `rate_limit` event with its subscription status during every
 | `branch` | string | `--branch`. |
 | `head_sha` | 40-hex string or null | `HEAD` of the working copy after the agent stopped. |
 | `pushed` | boolean | `true` when the remote branch points at `head_sha`. |
-| `pr_url` | string or null | The newest pull request whose head is `branch`, in any state, from `gh pr list`. |
+| `pr_url` | string or null | The newest pull request whose head is `branch`, in any state. Without one, the newest pull request on another branch the run pushed that is open or was opened during the run. See [The end of a run](#the-end-of-a-run). |
 | `open_questions` | array of string | `question_id` of each blocking question. |
 | `usage` | object | The sum of the run's `usage` events, with the fields of `usage`. |
 | `duration_ms` | integer | From process start to this event. |
@@ -164,6 +164,15 @@ Claude Code sends a `rate_limit` event with its subscription status during every
 | `needs_input` | 3 | The run otherwise succeeded, and the agent asked at least one blocking question. |
 | `cancelled` | 130 | The runner received `SIGTERM` or `SIGINT`. It stops the harness with `SIGTERM`, then reports. |
 
+### The end of a run
+
+Before it prints `run.finished`, the runner does two things.
+
+1. Unless the run was cancelled, it pushes the checked-out branch when that branch has commits that no remote branch has. It commits nothing, never forces, and never pushes `--base` or the repository's default branch. A `log` event reports the push, a failed push, or the commits it left. The run's `status` does not change.
+2. It looks for the run's pull request with `gh pr list`. It first asks for pull requests whose head is `branch`. Then it asks for each other branch the run pushed: a branch whose remote-tracking ref has an `update by push` reflog entry since the run started. A branch that another agent pushed, and that this run only fetched, does not count.
+
+Runner versions before this change set `pr_url` only from `branch`. The change keeps `v` at 1: `pr_url` keeps its type, and when `branch` has a pull request it names the same one. A consumer that needs the head branch of `pr_url` reads it from the pull request.
+
 ## Questions
 
 The runner registers one MCP server, `cloud_agent`, with every harness. It has one tool, `ask_user`, with the input `{question, options?, blocking?}`. `blocking` defaults to `true`. The tool description tells the agent to use `ask_user` wherever a skill says to ask the user.
@@ -173,13 +182,13 @@ When the agent calls `ask_user`, the MCP server sends the question to the runner
 - For a blocking question, the agent stops, summarizes its progress, and ends its turn. The run ends as `needs_input`, and `open_questions` lists the question.
 - For a non-blocking question, the agent continues with the default it stated.
 
-To answer a blocking question, start a new run with the same `--repo` and `--branch`, and put the original brief, the question, and the answer in the prompt file. The new run checks out the existing branch (`workspace.ready.branch_existed` is `true`), so the agent continues from the pushed commits.
+To answer a blocking question, start a new run with the same `--repo` and `--branch`, and put the original brief, the question, and the answer in the prompt file. The new run checks out the existing branch (`workspace.ready.branch_existed` is `true`), so the agent continues from the pushed commits. The run that asked pushed the agent's unpushed commits before it ended (see [The end of a run](#the-end-of-a-run)).
 
 The socket carries a reply line for each question. In version 1 the reply is always `{"answer": null}`. A later version can hold the reply until an operator answers, and the agent then gets the answer as the tool result in the same run. That change does not change the event format.
 
 ## Credentials
 
-The runner replaces every occurrence of a credential value with `[REDACTED]` in each event, in the `--raw-out` file, and on stderr. The credentials are the values of `GH_TOKEN`, `GITHUB_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CODEX_API_KEY`, and `OPENCODE_API_KEY`, and every string of eight or more characters in the file that `CODEX_AUTH_JSON` names.
+The runner replaces every occurrence of a credential value with `[REDACTED]` in each event, in the `--raw-out` file, and on stderr. The credentials are the values of `GH_TOKEN`, `GITHUB_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CODEX_API_KEY`, `OPENCODE_API_KEY`, and `CLOUD_AGENT_RUN_TOKEN`, and every string of eight or more characters in the file that `CODEX_AUTH_JSON` names. The runner also redacts every string in a GitHub token format (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, or `github_pat_` and at least 20 more characters), because a token fetched during the run is in no variable.
 
 ## Mapping from each harness
 

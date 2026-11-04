@@ -8,6 +8,8 @@ export const LABEL_MANAGED_BY = 'app.kubernetes.io/managed-by';
 export const MANAGED_BY = 'backstage-plugin-cloud-agents';
 export const LABEL_AGENT_ID = 'cloud-agents/agent-id';
 export const LABEL_RUN_ID = 'cloud-agents/run-id';
+/** The Secret key and env var of the token a pod sends to fetch its GitHub token. */
+export const RUN_TOKEN_ENV = 'CLOUD_AGENT_RUN_TOKEN';
 
 const PROMPT_DIR = '/var/run/cloud-agent/prompt';
 const CODEX_DIR = '/var/run/cloud-agent/codex';
@@ -34,6 +36,7 @@ export interface JobSpecConfig {
   namespace: string;
   runnerImage: string;
   job: JobConfig;
+  runnerGithubTokenUrl: string | undefined;
 }
 
 /** `ag_3f9c…` and run 2 give `cloud-agent-3f9c…-2`, a valid DNS-1123 name. */
@@ -109,6 +112,14 @@ export function buildJob(cfg: JobSpecConfig, launch: RunLaunch): V1Job {
               ],
               env: [
                 { name: 'CLOUD_AGENT_RUN_ID', value: launch.runId },
+                ...(cfg.runnerGithubTokenUrl
+                  ? [
+                      {
+                        name: 'CLOUD_AGENT_GH_TOKEN_URL',
+                        value: cfg.runnerGithubTokenUrl,
+                      },
+                    ]
+                  : []),
                 ...secretEnv.map(name => ({
                   name,
                   valueFrom: {

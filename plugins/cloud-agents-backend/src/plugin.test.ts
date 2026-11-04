@@ -132,6 +132,7 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
   });
 
   beforeEach(async () => {
+    github.reset();
     kube = new FakeKube();
     kubeUrl = await kube.start();
     logs = new CapturedLogs();
@@ -419,6 +420,7 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
     );
     const secret = [...kube.secrets.values()][0]!;
     expect(Object.keys(secret.stringData!).sort()).toEqual([
+      'CLOUD_AGENT_RUN_TOKEN',
       'GH_TOKEN',
       'OPENCODE_API_KEY',
       'prompt.md',
@@ -885,7 +887,36 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
     ).toBe(401);
   });
 
-  it('connects GitHub through the App web flow and refreshes the token for each run', async () => {
+  async function connectGithub(): Promise<void> {
+    const connect = await fetch(`${baseUrl}/me/github/connect`, {
+      headers: { Authorization: ALICE, Accept: 'application/json' },
+    });
+    const { url } = (await connect.json()) as { url: string };
+    const state = new URL(url).searchParams.get('state')!;
+    github.codes.set('code-1', 'alice-gh');
+    const callback = await fetch(
+      `${baseUrl}/me/github/callback?code=code-1&state=${state}`,
+      { redirect: 'manual' },
+    );
+    expect(callback.headers.get('location')).toBe(
+      'http://localhost:3000/cloud-agents/settings?github=connected',
+    );
+  }
+
+  function runSecrets(): Array<{ ghToken: string; runToken: string }> {
+    return [...kube.secrets.values()].map(secret => ({
+      ghToken: secret.stringData!.GH_TOKEN!,
+      runToken: secret.stringData!.CLOUD_AGENT_RUN_TOKEN!,
+    }));
+  }
+
+  function fetchRunGithubToken(runToken: string | undefined) {
+    return fetch(`${baseUrl}/runner/github-token`, {
+      headers: runToken ? { Authorization: `Bearer ${runToken}` } : {},
+    });
+  }
+
+  it('connects GitHub through the App web flow', async () => {
     await backend.stop();
     await start(true);
     expect(
@@ -934,8 +965,25 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
       login: 'alice-gh',
       method: 'oauth',
     });
+  });
 
+  it('starts a run with the stored GitHub token while it outlasts the run, and refreshes it once GitHub rejects it', async () => {
+    await backend.stop();
+    await start(true);
+    await connectGithub();
     await api('PUT', '/me/credentials/opencode', { value: OPENCODE_KEY });
+
+    await api('POST', '/agents', {
+      repo: 'acme/app',
+      prompt: 'p',
+      tier: 'flash',
+    });
+    expect(github.tokenRequests.map(r => r.grant_type ?? 'code')).toEqual([
+      'code',
+    ]);
+    expect(runSecrets()[0]!.ghToken).toBe('ghu_issued_1');
+
+    github.logins.delete('ghu_issued_1');
     await api('POST', '/agents', {
       repo: 'acme/app',
       prompt: 'p',
@@ -946,11 +994,97 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
       'refresh_token',
     ]);
     expect(github.tokenRequests[1]!.refresh_token).toBe('ghr_issued_1');
-    expect([...kube.secrets.values()][0]!.stringData!.GH_TOKEN).toBe(
-      'ghu_issued_2',
-    );
+    expect(runSecrets()[1]!.ghToken).toBe('ghu_issued_2');
+
     const dump = JSON.stringify(await knex('credentials').select());
     expect(dump).not.toMatch(/gh[ur]_issued/);
+    expect(logs.text()).not.toMatch(/gh[ur]_issued/);
+  });
+
+  it('refreshes a token that would expire during the run once for two concurrent run starts, and both runs keep a valid token', async () => {
+    await backend.stop();
+    await start(true);
+    github.expiresIn = 3600;
+    await connectGithub();
+    await api('PUT', '/me/credentials/opencode', { value: OPENCODE_KEY });
+    github.expiresIn = 28800;
+    github.tokenDelayMs = 200;
+    kube.script = () => ({
+      lines: recordedStream('opencode'),
+      holdAt: 1,
+      exitCode: 0,
+    });
+
+    const created = await Promise.all([
+      api('POST', '/agents', { repo: 'acme/app', prompt: 'a', tier: 'flash' }),
+      api('POST', '/agents', { repo: 'acme/app', prompt: 'b', tier: 'flash' }),
+    ]);
+    expect(created.map(r => r.status)).toEqual([201, 201]);
+    expect(github.tokenRequests.map(r => r.grant_type ?? 'code')).toEqual([
+      'code',
+      'refresh_token',
+    ]);
+    const runs = runSecrets();
+    expect(runs.map(r => r.ghToken)).toEqual(['ghu_issued_2', 'ghu_issued_2']);
+    expect(github.logins.get('ghu_issued_2')).toBe('alice-gh');
+    expect(github.logins.has('ghu_issued_1')).toBe(false);
+
+    for (const run of runs) {
+      const response = await fetchRunGithubToken(run.runToken);
+      expect(response.status).toBe(200);
+      const { token } = (await response.json()) as { token: string };
+      expect(github.logins.get(token)).toBe('alice-gh');
+    }
+    expect(github.tokenRequests).toHaveLength(2);
+  });
+
+  it('gives a runner pod the current GitHub token only for its active run', async () => {
+    await backend.stop();
+    await start(true);
+    github.expiresIn = 300;
+    await connectGithub();
+    await api('PUT', '/me/credentials/opencode', { value: OPENCODE_KEY });
+    kube.script = () => ({
+      lines: recordedStream('opencode'),
+      holdAt: 1,
+      exitCode: 0,
+    });
+    const agent = (
+      await api('POST', '/agents', {
+        repo: 'acme/app',
+        prompt: 'p',
+        tier: 'flash',
+      })
+    ).body as Agent;
+    const job = [...kube.jobs.values()][0]!;
+    expect(job.spec!.template.spec!.containers[0]!.env).toContainEqual({
+      name: 'CLOUD_AGENT_GH_TOKEN_URL',
+      value: 'http://backstage.test/api/cloud-agents/runner/github-token',
+    });
+    const { ghToken, runToken } = runSecrets()[0]!;
+    expect(ghToken).toBe('ghu_issued_2');
+    expect(runToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    const fresh = await fetchRunGithubToken(runToken);
+    expect(fresh.status).toBe(200);
+    expect(fresh.headers.get('cache-control')).toBe('no-store');
+    const { token } = (await fresh.json()) as { token: string };
+    expect(token).toBe('ghu_issued_3');
+    expect(github.logins.get(token)).toBe('alice-gh');
+    expect(github.logins.has(ghToken)).toBe(false);
+
+    const { body: patToken } = await api('POST', '/me/tokens', { name: 'x' });
+    for (const wrong of [undefined, 'not-a-run-token', patToken.token]) {
+      expect((await fetchRunGithubToken(wrong)).status).toBe(401);
+    }
+
+    kube.release(agent.runs[0]!.id);
+    await agentWhen(agent.id, a => a.status === 'succeeded');
+    expect((await fetchRunGithubToken(runToken)).status).toBe(401);
+
+    const rows = JSON.stringify(await knex('runs').select());
+    expect(rows).not.toContain(runToken);
+    expect(logs.text()).not.toContain(runToken);
     expect(logs.text()).not.toMatch(/gh[ur]_issued/);
   });
 

@@ -93,14 +93,23 @@ export class GithubClient {
     });
   }
 
-  async getLogin(token: string): Promise<string> {
-    const response = await fetch(new URL('user', `${this.apiBaseUrl}/`), {
+  private getUser(token: string): Promise<Response> {
+    return fetch(new URL('user', `${this.apiBaseUrl}/`), {
       headers: {
         Accept: 'application/vnd.github+json',
         Authorization: `Bearer ${token}`,
         'User-Agent': 'backstage-plugin-cloud-agents',
       },
     });
+  }
+
+  /** Whether GitHub answers 401 to the token: revoked, expired, or replaced. */
+  async rejects(token: string): Promise<boolean> {
+    return (await this.getUser(token)).status === 401;
+  }
+
+  async getLogin(token: string): Promise<string> {
+    const response = await this.getUser(token);
     if (!response.ok) {
       throw new Error(`GitHub rejected the token (HTTP ${response.status})`);
     }

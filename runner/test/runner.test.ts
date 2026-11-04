@@ -34,6 +34,9 @@ test('credentials from env and a codex auth.json never reach the event stream', 
     assert.ok(!out.includes(secret), secret);
   }
   assert.ok(!secrets.includes('/home/agent'), 'only credential variables are secrets');
+  const fetchedMidRun = 'ghu_RefreshedAfterTheRunStarted0123456789';
+  emitter.emit({ type: 'log', level: 'info', source: 'harness', message: `token ${fetchedMidRun}` });
+  assert.match(lines.at(-1) ?? '', /"message":"token \[REDACTED\]"/, 'a GitHub token in no variable is redacted by its format');
   assert.ok(!secrets.includes('chatgpt'), 'short auth.json values are not treated as secrets');
   for (const event of emitter.emitted) assert.deepEqual(validate(event), []);
 });

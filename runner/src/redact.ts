@@ -10,7 +10,11 @@ export const CREDENTIAL_ENV = [
   'OPENAI_API_KEY',
   'CODEX_API_KEY',
   'OPENCODE_API_KEY',
+  'CLOUD_AGENT_RUN_TOKEN',
 ] as const;
+
+/** GitHub token formats. A token fetched during the run is in no variable, so its format is what gives it away. */
+const GITHUB_TOKEN = /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g;
 
 const MIN_SECRET_LENGTH = 8;
 
@@ -41,11 +45,10 @@ export function collectSecrets(env: NodeJS.ProcessEnv): string[] {
 export function redactString(text: string, secrets: readonly string[]): string {
   let out = text;
   for (const secret of secrets) if (out.includes(secret)) out = out.split(secret).join(REDACTED);
-  return out;
+  return out.replace(GITHUB_TOKEN, REDACTED);
 }
 
 export function redactDeep(value: unknown, secrets: readonly string[]): unknown {
-  if (secrets.length === 0) return value;
   if (typeof value === 'string') return redactString(value, secrets);
   if (Array.isArray(value)) return value.map((item) => redactDeep(item, secrets));
   if (value !== null && typeof value === 'object') {

@@ -36,6 +36,8 @@ The image accepts `run`, `doctor`, `version`, and `help` with or without a leadi
 
 The exit code is 0 for `succeeded`, 1 for `failed`, 2 for a usage error, 3 for `needs_input`, and 130 for `cancelled`.
 
+Before it exits, the runner pushes commits the agent left unpushed on its branch, unless the run was cancelled, and reports the run's pull request, also when the agent opened it from a branch of its own. See [The end of a run](EVENTS.md#the-end-of-a-run).
+
 The runner tells the harness to run without permission prompts. Claude Code gets `--permission-mode bypassPermissions`, Codex gets `--dangerously-bypass-approvals-and-sandbox`, and OpenCode gets `--auto`. The container is the sandbox.
 
 ## Credentials
@@ -44,13 +46,17 @@ Each credential arrives as an environment variable from the agent's Kubernetes S
 
 | Variable | Used by | Notes |
 | --- | --- | --- |
-| `GH_TOKEN` | git, `gh`, the skills install, and the agent | Required. It must read the private `alaborderie/claude-plugins` and push to `--repo`. git gets it through `gh auth setup-git`, so the token never appears in a remote URL. |
+| `GH_TOKEN` | git, `gh`, the skills install, and the agent | Required. It must read the private `alaborderie/claude-plugins` and push to `--repo`. git gets it from `cloud-agent git-credential`, its credential helper for github.com, so the token never appears in a remote URL. |
+| `CLOUD_AGENT_GH_TOKEN_URL` | git and `gh` | Optional, set by the Backstage plugin. Where the run's current GitHub token is. When it and `CLOUD_AGENT_RUN_TOKEN` are set, the credential helper and the `gh` in the image ask this URL each time, so a run keeps working after the plugin refreshes the token. If the URL does not answer, they use `GH_TOKEN`. |
+| `CLOUD_AGENT_RUN_TOKEN` | git and `gh` | Optional. The bearer token for `CLOUD_AGENT_GH_TOKEN_URL`, valid while the run is active. |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `--harness claude` | The token from `claude setup-token`. Only the official Claude Code CLI receives it. |
 | `CODEX_API_KEY` or `OPENAI_API_KEY` | `--harness codex` | An OpenAI API key. Preferred for unattended pods. |
 | `CODEX_AUTH_JSON` | `--harness codex` | The path of a ChatGPT `auth.json`, mounted from a Secret. The runner copies it to `~/.codex/auth.json`. Give the mount a mode the container user (uid 10001) can read, such as `defaultMode: 0444`. |
 | `OPENCODE_API_KEY` | `--harness opencode` | An OpenCode Go API key from the OpenCode console. |
 
-Each harness process gets `GH_TOKEN` and its own credential only. Claude Code never sees an OpenAI or OpenCode key, and Codex and OpenCode never see `CLAUDE_CODE_OAUTH_TOKEN`. The skills install and `doctor`'s probes get no harness credential. The runner redacts every credential value from stdout, stderr, and `--raw-out` (see [EVENTS.md](EVENTS.md#credentials)). The image contains no credentials.
+`cloud-agent github-token` prints the current token. The image's `/opt/cloud-agent/bin/gh`, first on `PATH`, sets `GH_TOKEN` from it and runs `/usr/local/bin/gh`.
+
+Each harness process gets `GH_TOKEN`, the two variables above, and its own credential only. Claude Code never sees an OpenAI or OpenCode key, and Codex and OpenCode never see `CLAUDE_CODE_OAUTH_TOKEN`. The skills install and `doctor`'s probes get no harness credential. The runner redacts every credential value from stdout, stderr, and `--raw-out` (see [EVENTS.md](EVENTS.md#credentials)). The image contains no credentials.
 
 A ChatGPT `auth.json` holds a refresh token. If Codex refreshes it during a run, the copy in the Secret can stop working, because the refreshed token exists only in the pod. Use an API key for Jobs, or re-export `auth.json` when Codex reports a login error.
 

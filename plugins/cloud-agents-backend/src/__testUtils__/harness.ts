@@ -49,22 +49,46 @@ export class CapturedLogs {
   }
 }
 
-/** A GitHub API stand-in: `/user` names the token's owner, and the OAuth token endpoint. */
 /**
  * A GitHub stand-in: `/user` names a token's owner, and the OAuth token
- * endpoint trades `codes` and refresh tokens for new tokens.
+ * endpoint trades `codes` and refresh tokens for new tokens. As on GitHub, a
+ * refresh token works once, and refreshing invalidates the access token it was
+ * issued with.
  */
-export async function startFakeGithub(): Promise<{
+export interface FakeGithub {
   url: string;
   close(): Promise<void>;
   logins: Map<string, string>;
   codes: Map<string, string>;
   tokenRequests: Array<Record<string, string>>;
-}> {
-  const logins = new Map<string, string>();
-  const codes = new Map<string, string>();
-  const tokenRequests: Array<Record<string, string>> = [];
+  /** `expires_in` of the next tokens issued, in seconds. */
+  expiresIn: number;
+  /** How long the token endpoint takes to answer, in ms. */
+  tokenDelayMs: number;
+  /** Forgets every token and request, and restores the defaults. */
+  reset(): void;
+}
+
+export async function startFakeGithub(): Promise<FakeGithub> {
+  const accessOfRefresh = new Map<string, string>();
   let issued = 0;
+  const fake: FakeGithub = {
+    url: '',
+    close: async () => {},
+    logins: new Map(),
+    codes: new Map(),
+    tokenRequests: [],
+    expiresIn: 28800,
+    tokenDelayMs: 0,
+    reset() {
+      for (const map of [fake.logins, fake.codes, accessOfRefresh]) map.clear();
+      fake.tokenRequests.length = 0;
+      fake.expiresIn = 28800;
+      fake.tokenDelayMs = 0;
+      issued = 0;
+    },
+  };
+  const { logins, codes, tokenRequests } = fake;
   const server: Server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     const token = (req.headers.authorization ?? '').replace(/^Bearer /, '');
@@ -80,23 +104,28 @@ export async function startFakeGithub(): Promise<{
         string
       >;
       tokenRequests.push(body);
-      const login = body.code
-        ? codes.get(body.code)
-        : logins.get(`refresh:${body.refresh_token}`);
+      await new Promise(r => setTimeout(r, fake.tokenDelayMs));
+      const refreshKey = `refresh:${body.refresh_token}`;
+      const login = body.code ? codes.get(body.code) : logins.get(refreshKey);
       if (!login || body.client_secret !== 'app-secret') {
         res.end(JSON.stringify({ error: 'bad_verification_code' }));
         return;
       }
       if (body.code) codes.delete(body.code);
+      else {
+        logins.delete(refreshKey);
+        logins.delete(accessOfRefresh.get(body.refresh_token ?? '') ?? '');
+      }
       issued += 1;
       const access = `ghu_issued_${issued}`;
       const refresh = `ghr_issued_${issued}`;
       logins.set(access, login);
       logins.set(`refresh:${refresh}`, login);
+      accessOfRefresh.set(refresh, access);
       res.end(
         JSON.stringify({
           access_token: access,
-          expires_in: 28800,
+          expires_in: fake.expiresIn,
           refresh_token: refresh,
           refresh_token_expires_in: 15897600,
         }),
@@ -107,13 +136,9 @@ export async function startFakeGithub(): Promise<{
     res.end('{}');
   });
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
-  return {
-    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
-    logins,
-    codes,
-    tokenRequests,
-    close: () => new Promise(r => server.close(() => r())),
-  };
+  fake.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  fake.close = () => new Promise(r => server.close(() => r()));
+  return fake;
 }
 
 export const ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
@@ -152,6 +177,7 @@ export async function startPluginBackend(options: {
             namespace: 'agents-test',
             runnerImage: 'runner:test',
             encryptionKey: ENCRYPTION_KEY,
+            runnerBackendUrl: 'http://backstage.test',
             pollIntervalMs: 20,
             podStartTimeoutMs: options.podStartTimeoutMs ?? 120_000,
             github: {
