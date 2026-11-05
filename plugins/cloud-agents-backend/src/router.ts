@@ -11,6 +11,7 @@ import {
   NotFoundError,
 } from '@backstage/errors';
 import {
+  AGENT_KINDS,
   AGENT_STATUSES,
   HARNESSES,
   type AccessToken,
@@ -53,8 +54,12 @@ const createAgentBody = z
         label: z.string().optional(),
       })
       .optional(),
+    kind: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
   })
   .strip();
+
+/** The JSON a hub keeps between runs: any value of at most 64 KiB. */
+const HUB_STATE_MAX_BYTES = 64 * 1024;
 
 const replyBody = z.object({ questionId: nonEmpty, answer: nonEmpty });
 const messageBody = z.object({ text: nonEmpty });
@@ -129,6 +134,9 @@ export function createRouter(deps: RouterDeps): express.Router {
       }),
       ...(body.model !== undefined && { model: body.model }),
       ...(body.effort !== undefined && { effort: body.effort }),
+      ...(body.kind !== undefined && {
+        kind: body.kind as (typeof AGENT_KINDS)[number],
+      }),
       ...(body.parent !== undefined && {
         parent: {
           source: body.parent.source,
@@ -151,11 +159,17 @@ export function createRouter(deps: RouterDeps): express.Router {
             req.query.status,
           )
         : undefined;
+    const parentId =
+      typeof req.query.parentId === 'string' && req.query.parentId
+        ? req.query.parentId
+        : undefined;
     res.json(
-      await agents.listAgents(
-        owner,
-        status as (typeof AGENT_STATUSES)[number] | undefined,
-      ),
+      await agents.listAgents(owner, {
+        ...(status !== undefined && {
+          status: status as (typeof AGENT_STATUSES)[number],
+        }),
+        ...(parentId !== undefined && { parentId }),
+      }),
     );
   });
 
@@ -243,6 +257,39 @@ export function createRouter(deps: RouterDeps): express.Router {
     );
     res.setHeader('Cache-Control', 'no-store');
     res.json({ token });
+  });
+
+  /** The hub of an active hub run, from the run's token. */
+  async function hubOfRun(req: express.Request): Promise<string> {
+    const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? '');
+    const agent = match?.[1]
+      ? await store.findActiveRunAgent(sha256Hex(match[1]))
+      : undefined;
+    if (agent?.kind !== 'hub') {
+      throw new AuthenticationError('Unknown or finished hub run');
+    }
+    return agent.id;
+  }
+
+  /** `read_state`: the JSON the hub's last `write_state` stored, or null. */
+  router.get('/runner/hub/state', async (req, res) => {
+    const hubId = await hubOfRun(req);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ state: await agents.hubState(hubId) });
+  });
+
+  /** `write_state`: `{"state": <any JSON>}`, at most 64 KiB. */
+  router.put('/runner/hub/state', async (req, res) => {
+    const hubId = await hubOfRun(req);
+    if (!req.body || typeof req.body !== 'object' || !('state' in req.body)) {
+      throw new InputError('Give {"state": <any JSON value>}');
+    }
+    const state: unknown = req.body.state;
+    if (Buffer.byteLength(JSON.stringify(state)) > HUB_STATE_MAX_BYTES) {
+      throw new InputError('state is larger than 64 KiB');
+    }
+    await agents.setHubState(hubId, state);
+    res.json({});
   });
 
   router.get('/me/credentials', async (req, res) => {

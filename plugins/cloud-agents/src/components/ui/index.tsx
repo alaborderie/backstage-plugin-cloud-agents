@@ -12,10 +12,13 @@ import {
   RiBox3Line,
   RiCheckLine,
   RiCloseLine,
+  RiExternalLinkLine,
   RiFileTextLine,
   RiFlashlightLine,
   RiFlowChart,
+  RiGitPullRequestLine,
   RiGlobalLine,
+  RiHourglassLine,
   RiPencilLine,
   RiPlugLine,
   RiRobot2Line,
@@ -32,7 +35,7 @@ import type {
   RunStatus,
   ToolKind,
 } from '@alaborderie/plugin-cloud-agents-common';
-import { STATUS_LABEL } from '../../format';
+import { STATUS_LABEL, prNumber } from '../../format';
 import { usePrefersReducedMotion } from '../../hooks';
 import styles from './ui.module.css';
 
@@ -67,6 +70,7 @@ export const STATUS_GLYPH: Partial<Record<AgentStatus, Icon>> = {
   failed: RiCloseLine,
   stopped: RiStopLine,
   queued: RiTimeLine,
+  waiting: RiHourglassLine,
 };
 
 /**
@@ -108,6 +112,23 @@ export function StatusPill(props: {
       {props.status === 'running' && <LiveDot />}
       {STATUS_LABEL[props.status]}
     </span>
+  );
+}
+
+/** A pull request's number, opening it on GitHub. */
+export function PrChip(props: { url: string }) {
+  return (
+    <a
+      className={styles.prLink}
+      href={props.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Pull request #${prNumber(props.url)}`}
+    >
+      <RiGitPullRequestLine className={styles.iconXs} aria-hidden="true" />#
+      {prNumber(props.url)}
+      <RiExternalLinkLine className={styles.iconXs} aria-hidden="true" />
+    </a>
   );
 }
 

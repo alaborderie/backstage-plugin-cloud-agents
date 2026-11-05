@@ -4,6 +4,7 @@ import { cloudAgentsApiRef, type CloudAgentsApi } from '../../api';
 import { rootRouteRef } from '../../routes';
 import {
   failed,
+  hub,
   iso,
   mockApi,
   needsYou,
@@ -76,6 +77,19 @@ describe('CloudAgentsWidget', () => {
       'href',
       '/cloud-agents',
     );
+  });
+
+  it('lists a hub waiting on its children after the running agents', async () => {
+    await render(mockApi({ listAgents: jest.fn(async () => [hub, running]) }));
+    const link = await screen.findByRole('link', { name: hub.title });
+    expect(link).toHaveAttribute('href', `/cloud-agents/agents/${hub.id}`);
+    expect(screen.getByText('Waiting on children')).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole('link')
+        .map(l => l.textContent)
+        .filter(text => text === hub.title || text === running.title),
+    ).toEqual([running.title, hub.title]);
   });
 
   it('offers a new agent when nothing is running', async () => {

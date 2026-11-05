@@ -6,7 +6,13 @@ import { DEFAULT_TIERS } from '@alaborderie/plugin-cloud-agents-common';
 import { readCloudAgentsConfig } from './config';
 import { CredentialCipher } from './crypto';
 import { buildJob, buildSecret, jobNameFor, type RunLaunch } from './jobSpec';
+import { hubRunPrompt, hubSections } from './prompt';
 import { parseRunnerLine } from './runnerEvents';
+import {
+  hubRunTokenKey,
+  signHubRunToken,
+  verifyHubRunToken,
+} from './runTokens';
 import schema from './schema/events.v1.schema.json';
 import { outcomeOfExitCode } from './agents';
 
@@ -196,9 +202,11 @@ describe('job spec', () => {
       resources: { requests: {}, limits: {} },
     },
     runnerGithubTokenUrl: 'http://bs.svc/api/cloud-agents/runner/github-token',
+    runnerApiUrl: 'http://bs.svc/api/cloud-agents',
   };
   const launch: RunLaunch = {
     agentId: 'ag_0123456789ab',
+    kind: 'task',
     runId: 'run-1',
     jobName: jobNameFor('ag_0123456789ab', 2),
     harness: 'codex',
@@ -241,6 +249,22 @@ describe('job spec', () => {
       'codex-auth.json',
       'prompt.md',
     ]);
+  });
+
+  it('tells only a hub run where the hub tools are', () => {
+    const env = (kind: 'task' | 'hub') =>
+      buildJob(spec, { ...launch, kind }).spec!.template.spec!.containers[0]!
+        .env!;
+    expect(env('task').map(e => e.name)).not.toContain('CLOUD_AGENT_KIND');
+    expect(env('hub')).toEqual(
+      expect.arrayContaining([
+        { name: 'CLOUD_AGENT_KIND', value: 'hub' },
+        {
+          name: 'CLOUD_AGENT_API_URL',
+          value: 'http://bs.svc/api/cloud-agents',
+        },
+      ]),
+    );
   });
 });
 
@@ -286,6 +310,81 @@ describe('documented Kubernetes permissions', () => {
     for (const call of calls) expect(permissions).toHaveProperty(call);
     expect(documented.sort()).toEqual(
       [...new Set(calls.map(call => permissions[call]))].sort(),
+    );
+  });
+});
+
+describe('hub run tokens', () => {
+  const tokenKey = hubRunTokenKey(Buffer.alloc(32, 7));
+  const inAnHour = new Date(Date.now() + 3_600_000);
+
+  it('names the run of a valid token and refuses tampered, foreign, and expired ones', () => {
+    const token = signHubRunToken(tokenKey, 'run-1', inAnHour);
+    expect(verifyHubRunToken(tokenKey, token)).toBe('run-1');
+    const [prefix, , expiry, sig] = token.split('.');
+    expect(
+      verifyHubRunToken(tokenKey, [prefix, 'run-2', expiry, sig].join('.')),
+    ).toBe(undefined);
+    expect(
+      verifyHubRunToken(hubRunTokenKey(Buffer.alloc(32, 8)), token),
+    ).toBeUndefined();
+    expect(
+      verifyHubRunToken(
+        key,
+        signHubRunToken(tokenKey, 'run-1', new Date(Date.now() - 1000)),
+      ),
+    ).toBeUndefined();
+    expect(verifyHubRunToken(tokenKey, 'random-task-token')).toBeUndefined();
+  });
+});
+
+describe('hub run prompt', () => {
+  it('lists the objective and only the news of this run', () => {
+    const news = hubSections({
+      wakes: [
+        {
+          childId: 'ag_x',
+          title: 'Add a',
+          status: 'succeeded',
+          branch: 'cloud-agent/x',
+          prUrl: 'https://github.com/o/r/pull/1',
+          questions: [],
+        },
+        {
+          childId: 'ag_y',
+          title: 'Add b',
+          status: 'needs_input',
+          branch: 'cloud-agent/y',
+          prUrl: null,
+          questions: [
+            {
+              questionId: 'ask-1',
+              question: 'Which name?',
+              options: ['a', 'b'],
+            },
+          ],
+        },
+      ],
+      messages: [],
+      answers: [{ questionId: 'ask-1', question: 'Go on?', answer: 'yes' }],
+    });
+    expect(hubRunPrompt('Ship a and b', news)).toBe(
+      [
+        'Use the backstage-hub skill.',
+        '',
+        'Objective:',
+        'Ship a and b',
+        '',
+        'Wake events:',
+        '- child ag_x "Add a" is succeeded (branch cloud-agent/x, PR https://github.com/o/r/pull/1)',
+        '- child ag_y "Add b" is needs_input: question ask-1 "Which name?" options [a, b]',
+        '',
+        'Answers from the user:',
+        '- ask-1 "Go on?": yes',
+      ].join('\n'),
+    );
+    expect(hubRunPrompt('Ship a and b', null)).toBe(
+      'Use the backstage-hub skill.\n\nObjective:\nShip a and b',
     );
   });
 });

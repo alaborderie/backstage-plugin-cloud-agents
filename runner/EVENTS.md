@@ -184,7 +184,11 @@ When the agent calls `ask_user`, the MCP server sends the question to the runner
 
 To answer a blocking question, start a new run with the same `--repo` and `--branch`, and put the original brief, the question, and the answer in the prompt file. The new run checks out the existing branch (`workspace.ready.branch_existed` is `true`), so the agent continues from the pushed commits. The run that asked pushed the agent's unpushed commits before it ended (see [The end of a run](#the-end-of-a-run)).
 
-The socket carries a reply line for each question. In version 1 the reply is always `{"answer": null}`. A later version can hold the reply until an operator answers, and the agent then gets the answer as the tool result in the same run. That change does not change the event format.
+The socket carries one JSON line per tool call, `{"tool": "ask_user", "input": {...}}`, and one reply line, `{"text": "...", "isError": false}`, which becomes the tool result. In version 1 the reply to `ask_user` never holds an answer. A later version can hold the reply until an operator answers, and the agent then gets the answer as the tool result in the same run. That change does not change the event format.
+
+### Hub tools
+
+On a hub run, when the plugin sets `CLOUD_AGENT_KIND=hub` and `CLOUD_AGENT_API_URL`, the `cloud_agent` server also offers `create_child`, `list_children`, `get_child`, `reply_child`, `message_child`, `stop_child`, `read_state`, and `write_state` ([docs/API.md](../docs/API.md#hub-tools-in-the-pod)). The MCP server sends each call over the same socket. The runner makes the call to the plugin with `CLOUD_AGENT_RUN_TOKEN`, so the token never reaches the harness. The calls show up as ordinary `tool.call` and `tool.result` events, for example `mcp__cloud_agent__create_child`. A task run does not list them.
 
 ## Credentials
 

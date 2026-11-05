@@ -1,5 +1,8 @@
 import type { V1Job, V1Secret } from '@kubernetes/client-node';
-import type { Harness } from '@alaborderie/plugin-cloud-agents-common';
+import type {
+  AgentKind,
+  Harness,
+} from '@alaborderie/plugin-cloud-agents-common';
 import type { JobConfig } from './config';
 import type { RunCredentials } from './credentials';
 
@@ -10,6 +13,10 @@ export const LABEL_AGENT_ID = 'cloud-agents/agent-id';
 export const LABEL_RUN_ID = 'cloud-agents/run-id';
 /** The Secret key and env var of the token a pod sends to fetch its GitHub token. */
 export const RUN_TOKEN_ENV = 'CLOUD_AGENT_RUN_TOKEN';
+/** On a hub run, `hub`: the runner then offers the hub tools. */
+export const KIND_ENV = 'CLOUD_AGENT_KIND';
+/** The plugin's API as the pod reaches it, for the hub tools. */
+export const API_URL_ENV = 'CLOUD_AGENT_API_URL';
 
 const PROMPT_DIR = '/var/run/cloud-agent/prompt';
 const CODEX_DIR = '/var/run/cloud-agent/codex';
@@ -20,6 +27,7 @@ const RUNNER_UID = 10001;
 /** One run's Job, as the launcher needs it. */
 export interface RunLaunch {
   agentId: string;
+  kind: AgentKind;
   runId: string;
   jobName: string;
   harness: Harness;
@@ -37,6 +45,7 @@ export interface JobSpecConfig {
   runnerImage: string;
   job: JobConfig;
   runnerGithubTokenUrl: string | undefined;
+  runnerApiUrl: string | undefined;
 }
 
 /** `ag_3f9c…` and run 2 give `cloud-agent-3f9c…-2`, a valid DNS-1123 name. */
@@ -118,6 +127,12 @@ export function buildJob(cfg: JobSpecConfig, launch: RunLaunch): V1Job {
                         name: 'CLOUD_AGENT_GH_TOKEN_URL',
                         value: cfg.runnerGithubTokenUrl,
                       },
+                    ]
+                  : []),
+                ...(launch.kind === 'hub' && cfg.runnerApiUrl
+                  ? [
+                      { name: KIND_ENV, value: 'hub' },
+                      { name: API_URL_ENV, value: cfg.runnerApiUrl },
                     ]
                   : []),
                 ...secretEnv.map(name => ({

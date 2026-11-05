@@ -29,7 +29,7 @@ const git = (...a) => execFileSync('git', a, { stdio: ['ignore', 'ignore', 'inhe
 const socket = JSON.parse(readFileSync(process.env.OPENCODE_CONFIG, 'utf8')).mcp.cloud_agent.command[3];
 const ask = (question) =>
   new Promise((resolve) => {
-    const c = net.createConnection(socket, () => c.write(JSON.stringify({ question, blocking: true }) + '\\n'));
+    const c = net.createConnection(socket, () => c.write(JSON.stringify({ tool: 'ask_user', input: { question, blocking: true } }) + '\\n'));
     c.on('data', () => {
       c.end();
       resolve();

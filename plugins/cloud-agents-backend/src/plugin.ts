@@ -3,7 +3,9 @@ import {
   createBackendPlugin,
   resolvePackagePath,
 } from '@backstage/backend-plugin-api';
+import { actionsRegistryServiceRef } from '@backstage/backend-plugin-api/alpha';
 import { KubeConfig } from '@kubernetes/client-node';
+import { registerActions } from './actions';
 import { AgentService } from './agents';
 import { readCloudAgentsConfig } from './config';
 import { CredentialService } from './credentials';
@@ -12,6 +14,7 @@ import { Followers } from './follower';
 import { GithubClient } from './github';
 import { Cluster } from './kube';
 import { createRouter } from './router';
+import { hubRunTokenKey } from './runTokens';
 import { Store } from './store';
 
 /**
@@ -32,6 +35,7 @@ export const cloudAgentsPlugin = createBackendPlugin({
         httpRouter: coreServices.httpRouter,
         httpAuth: coreServices.httpAuth,
         lifecycle: coreServices.lifecycle,
+        actionsRegistry: actionsRegistryServiceRef,
       },
       async init({
         config,
@@ -40,6 +44,7 @@ export const cloudAgentsPlugin = createBackendPlugin({
         httpRouter,
         httpAuth,
         lifecycle,
+        actionsRegistry,
       }) {
         const settings = readCloudAgentsConfig(config);
         const knex = await database.getClient();
@@ -73,6 +78,12 @@ export const cloudAgentsPlugin = createBackendPlugin({
           credentials,
           settings.tiers,
           logger,
+          {
+            runTokenKey: hubRunTokenKey(settings.encryptionKey),
+            hubsAvailable: settings.runnerApiUrl !== undefined,
+            activeDeadlineSeconds: settings.job.activeDeadlineSeconds,
+            hubWakeDelayMs: settings.hubWakeDelayMs,
+          },
         );
         const followers = new Followers(store, agents, cluster, logger, {
           podStartTimeoutMs:
@@ -83,8 +94,16 @@ export const cloudAgentsPlugin = createBackendPlugin({
         });
         agents.onRunStarted = run => followers.follow(run);
 
-        lifecycle.addStartupHook(() => followers.resumeAll());
-        lifecycle.addShutdownHook(() => followers.stopAll());
+        registerActions(actionsRegistry, agents);
+
+        lifecycle.addStartupHook(async () => {
+          await followers.resumeAll();
+          await agents.resumeHubs();
+        });
+        lifecycle.addShutdownHook(() => {
+          followers.stopAll();
+          agents.stopWakes();
+        });
 
         httpRouter.addAuthPolicy({ path: '/', allow: 'unauthenticated' });
         httpRouter.use(

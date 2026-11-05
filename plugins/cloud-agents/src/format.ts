@@ -7,6 +7,7 @@ export const STATUS_LABEL: Record<AgentStatus | RunStatus, string> = {
   queued: 'Queued',
   running: 'Running',
   needs_input: 'Needs you',
+  waiting: 'Waiting on children',
   succeeded: 'Succeeded',
   failed: 'Failed',
   stopped: 'Stopped',
@@ -68,8 +69,8 @@ export const repoName = (repo: string) => repo.split('/').pop() ?? repo;
 /** The pull request number at the end of a GitHub pull request URL. */
 export const prNumber = (url: string) => url.split('/').pop() ?? url;
 
-export const plural = (n: number, word: string) =>
-  `${n} ${word}${n === 1 ? '' : 's'}`;
+export const plural = (n: number, word: string, many = `${word}s`) =>
+  `${n} ${n === 1 ? word : many}`;
 
 /** Today, Yesterday, or Earlier, in the viewer's time zone. */
 export function dayGroup(

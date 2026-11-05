@@ -14,7 +14,7 @@ const USAGE = `Usage:
                   --repo <owner/name> --base <ref> --branch <name> --prompt-file <path>
                   [--workdir <dir>] [--run-id <id>] [--raw-out <file>] [--skip-skills-install]
   cloud-agent doctor [--skill <name>]... [--skip-skills-install]
-  cloud-agent mcp-ask [--socket <path>]
+  cloud-agent mcp-ask [--socket <path>] [--hub]
   cloud-agent github-token
   cloud-agent git-credential get|store|erase
   cloud-agent version
@@ -106,8 +106,8 @@ async function main(argv: string[]): Promise<number> {
       return ok ? 0 : 1;
     }
     case 'mcp-ask': {
-      const { values } = parseArgs({ args: rest, options: { socket: { type: 'string' } }, strict: true });
-      await serveAsk(values.socket ?? null);
+      const { values } = parseArgs({ args: rest, options: { socket: { type: 'string' }, hub: { type: 'boolean', default: false } }, strict: true });
+      await serveAsk(values.socket ?? null, values.hub);
       return 0;
     }
     case 'github-token':

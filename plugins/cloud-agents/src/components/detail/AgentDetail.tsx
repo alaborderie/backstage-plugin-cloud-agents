@@ -24,6 +24,7 @@ import {
   RiGitBranchLine,
   RiGitPullRequestLine,
   RiGithubLine,
+  RiNodeTree,
   RiRefreshLine,
   RiStopLine,
 } from '@remixicon/react';
@@ -61,6 +62,7 @@ import {
   useFocusWhen,
 } from '../ui';
 import { Composer } from './Composer';
+import { HubChildren } from './HubChildren';
 import { Rail } from './Rail';
 import { TimelineItem, type TimelineContext } from './Timeline';
 import { buildTimeline, questionEvents } from './timeline';
@@ -101,7 +103,7 @@ function nearBottom(scroller: HTMLElement): boolean {
 
 /** The Stop confirmation. "Keep running" takes focus, the safe choice. */
 function StopConfirm(props: {
-  branch: string;
+  agent: Agent;
   stopping: boolean;
   close(): void;
   onStop(): void;
@@ -112,11 +114,18 @@ function StopConfirm(props: {
       <Heading slot="title" className={styles.popoverTitle}>
         Stop this agent?
       </Heading>
-      <p>
-        The Job is deleted and the run reports{' '}
-        <span className={ui.mono}>cancelled</span>. Commits the agent already
-        pushed stay on <span className={ui.mono}>{props.branch}</span>.
-      </p>
+      {props.agent.kind === 'hub' ? (
+        <p>
+          The hub and every child still working stop. Commits they already
+          pushed stay on their branches.
+        </p>
+      ) : (
+        <p>
+          The Job is deleted and the run reports{' '}
+          <span className={ui.mono}>cancelled</span>. Commits the agent already
+          pushed stay on <span className={ui.mono}>{props.agent.branch}</span>.
+        </p>
+      )}
       <div ref={ref} className={styles.popoverActions}>
         <Button variant="tertiary" size="small" onPress={props.close}>
           Keep running
@@ -173,7 +182,7 @@ function StopButton(props: { agent: Agent; onStopped(): void }) {
         <Dialog className={styles.popoverDialog} aria-label="Stop this agent?">
           {({ close }) => (
             <StopConfirm
-              branch={props.agent.branch}
+              agent={props.agent}
               stopping={stopping}
               close={close}
               onStop={() => stop(close)}
@@ -192,7 +201,11 @@ function Header(props: { agent: Agent; onStopped(): void }) {
   const notify = useNotify();
   const tier = tierOf(useTiers(), agent);
   const TierIcon = tierIcon(tier?.name);
-  const active = agent.status === 'queued' || agent.status === 'running';
+  const hub = useAgents().value?.find(a => a.id === agent.parentId);
+  const active =
+    agent.status === 'queued' ||
+    agent.status === 'running' ||
+    agent.status === 'waiting';
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(agent.branch);
@@ -215,10 +228,24 @@ function Header(props: { agent: Agent; onStopped(): void }) {
   };
   return (
     <>
-      <Link className={styles.crumb} to={base}>
-        <RiArrowLeftLine className={ui.icon} aria-hidden="true" />
-        Agents
-      </Link>
+      <nav className={styles.crumbs} aria-label="Breadcrumb">
+        <Link className={styles.crumb} to={base}>
+          <RiArrowLeftLine className={ui.icon} aria-hidden="true" />
+          Agents
+        </Link>
+        {agent.parentId && (
+          <>
+            <span aria-hidden="true">/</span>
+            <Link
+              className={styles.crumb}
+              to={`${base}/agents/${agent.parentId}`}
+            >
+              <RiNodeTree className={ui.icon} aria-hidden="true" />
+              {hub?.title ?? 'Hub'}
+            </Link>
+          </>
+        )}
+      </nav>
       <div className={styles.dHead}>
         <div className={styles.titles}>
           <StatusPill status={agent.status} large />
@@ -465,6 +492,7 @@ function Loaded(props: { agent: Agent; reload(): void }) {
   return (
     <section aria-labelledby="agent-title">
       <Header agent={agent} onStopped={restarted} />
+      {agent.kind === 'hub' && <HubChildren agent={agent} reload={reload} />}
       <div className={styles.detail}>
         <div className={styles.tlWrap} data-asking={asking ? '' : undefined}>
           {stream.error && (
@@ -527,7 +555,7 @@ export function AgentDetail() {
   const base = useBasePath();
   const agent = useAgent(id);
 
-  if (!agent.value && agent.error) {
+  if (agent.error && agent.value?.id !== id) {
     const notFound =
       agent.error instanceof CloudAgentsApiError && agent.error.status === 404;
     return (
@@ -559,6 +587,8 @@ export function AgentDetail() {
       </StateMessage>
     );
   }
-  if (!agent.value) return <DetailSkeleton />;
+  // Moving from one agent to another keeps the previous agent until the new
+  // one loads; mounting it under the new key would follow the wrong stream.
+  if (agent.value?.id !== id) return <DetailSkeleton />;
   return <Loaded key={id} agent={agent.value} reload={agent.reload} />;
 }

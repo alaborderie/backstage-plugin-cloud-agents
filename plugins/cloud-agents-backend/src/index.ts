@@ -5,3 +5,4 @@
  * @packageDocumentation
  */
 export { cloudAgentsPlugin as default } from './plugin';
+export { cloudAgentsHubRunTokens } from './runTokens';

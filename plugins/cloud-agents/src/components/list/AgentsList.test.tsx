@@ -2,7 +2,11 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   allAgents,
+  childAsking,
+  childDone,
   failed,
+  hub,
+  hubFamily,
   mockApi,
   needsYou,
   queued,
@@ -17,7 +21,7 @@ const titles = (name: string) =>
   within(region(name))
     .queryAllByRole('link')
     .map(link => link.textContent)
-    .filter(text => allAgents.some(a => a.title === text));
+    .filter(text => [...allAgents, ...hubFamily].some(a => a.title === text));
 
 describe('agents list', () => {
   it('groups agents into needs you, in progress, and by day', async () => {
@@ -71,6 +75,87 @@ describe('agents list', () => {
       within(needs).getByRole('link', { name: 'bonjour' }),
     ).toHaveAttribute('href', `/cloud-agents/agents/${needsYou.id}?pick=1`);
     expect(within(needs).getByText('+1 more question')).toBeInTheDocument();
+  });
+
+  it('nests a hub’s children under it, and shows a child whose hub is filtered out on its own', async () => {
+    await renderRoot(
+      mockApi({
+        listAgents: jest.fn(async () => [...allAgents, ...hubFamily]),
+      }),
+      '/cloud-agents',
+    );
+    await screen.findByRole('link', { name: hub.title });
+
+    const progress = region('In progress');
+    expect(titles('In progress')).toEqual([
+      running.title,
+      queued.title,
+      hub.title,
+      childDone.title,
+      childAsking.title,
+    ]);
+    expect(
+      within(progress).getByText('Waiting on children'),
+    ).toBeInTheDocument();
+    expect(within(progress).getByText('Hub · 2 children')).toBeInTheDocument();
+    const children = within(progress).getByRole('group', {
+      name: `Children of ${hub.title}`,
+    });
+    expect(
+      within(children).getByRole('link', { name: childDone.title }),
+    ).toHaveAttribute('href', `/cloud-agents/agents/${childDone.id}`);
+    expect(
+      within(children).getByRole('link', { name: 'Pull request #88' }),
+    ).toBeInTheDocument();
+    expect(titles('Needs you')).toEqual([needsYou.title, childAsking.title]);
+    expect(titles('Today')).toEqual([succeeded.title]);
+
+    const filters = screen.getByRole('radiogroup', {
+      name: 'Filter by status',
+    });
+    expect(
+      within(filters).getByRole('radio', { name: 'Running 3' }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      within(filters).getByRole('radio', { name: /^Succeeded/ }),
+    );
+    expect(titles('Today')).toEqual([succeeded.title, childDone.title]);
+    expect(
+      screen.queryByRole('link', { name: hub.title }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+  });
+
+  it('keeps the children of a hub that asks a question nested under it', async () => {
+    const asking = {
+      ...hub,
+      status: 'needs_input' as const,
+      openQuestions: [
+        {
+          questionId: 'ask-1',
+          runId: 'run-10',
+          question: 'Split the endpoint?',
+          options: ['Yes', 'No'],
+        },
+      ],
+    };
+    await renderRoot(
+      mockApi({
+        listAgents: jest.fn(async () => [asking, childAsking, childDone]),
+      }),
+      '/cloud-agents',
+    );
+    await screen.findAllByRole('link', { name: hub.title });
+    expect(titles('Needs you')).toEqual([hub.title, childAsking.title]);
+    const children = within(region('In progress')).getByRole('group', {
+      name: `Children of ${hub.title}`,
+    });
+    expect(
+      within(children)
+        .getAllByRole('link')
+        .map(link => link.textContent)
+        .filter(text => hubFamily.some(a => a.title === text)),
+    ).toEqual([childDone.title, childAsking.title]);
   });
 
   it('narrows the list by search and status, and clears the filters', async () => {

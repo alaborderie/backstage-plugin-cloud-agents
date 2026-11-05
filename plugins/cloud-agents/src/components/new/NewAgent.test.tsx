@@ -32,6 +32,7 @@ describe('new agent form', () => {
 
     await waitFor(() =>
       expect(api.createAgent).toHaveBeenCalledWith({
+        kind: 'task',
         repo: 'acme/acme-api',
         base: 'main',
         prompt: 'Add a health check endpoint',
@@ -44,6 +45,37 @@ describe('new agent form', () => {
     expect(
       screen.getByRole('log', { name: 'Agent events' }),
     ).toBeInTheDocument();
+  });
+
+  it('starts a hub from an objective', async () => {
+    const api = mockApi();
+    await renderRoot(api, '/cloud-agents/new');
+    const kind = await screen.findByRole('radiogroup', { name: 'Kind' });
+    expect(within(kind).getByRole('radio', { name: /^Agent/ })).toBeChecked();
+    await userEvent.click(within(kind).getByRole('radio', { name: /^Hub/ }));
+
+    await userEvent.type(repository(), 'acme/acme-api');
+    await userEvent.keyboard('{Escape}');
+    expect(
+      screen.queryByRole('textbox', { name: /What should the agent do\?/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.type(
+      screen.getByRole('textbox', { name: /What is the hub’s objective\?/ }),
+      'Ship the v2 invoices API',
+    );
+    const startHub = screen.getByRole('button', { name: 'Start hub' });
+    await waitFor(() => expect(startHub).toBeEnabled());
+    await userEvent.click(startHub);
+
+    await waitFor(() =>
+      expect(api.createAgent).toHaveBeenCalledWith({
+        kind: 'hub',
+        repo: 'acme/acme-api',
+        base: 'main',
+        prompt: 'Ship the v2 invoices API',
+        tier: 'flash',
+      }),
+    );
   });
 
   it('sends harness, model, and effort in custom mode', async () => {
@@ -66,6 +98,7 @@ describe('new agent form', () => {
 
     await waitFor(() =>
       expect(api.createAgent).toHaveBeenCalledWith({
+        kind: 'task',
         repo: 'acme/acme-api',
         base: 'main',
         prompt: 'p',
@@ -138,6 +171,7 @@ describe('new agent form', () => {
     await userEvent.click(start());
     await waitFor(() =>
       expect(api.createAgent).toHaveBeenCalledWith({
+        kind: 'task',
         repo: 'acme/acme-api',
         base: 'main',
         prompt: 'Add a health check endpoint',
@@ -197,6 +231,7 @@ describe('new agent form', () => {
       await userEvent.click(start());
       await waitFor(() =>
         expect(api.createAgent).toHaveBeenCalledWith({
+          kind: 'task',
           repo: 'acme/garden-app',
           base: 'main',
           prompt: brief,

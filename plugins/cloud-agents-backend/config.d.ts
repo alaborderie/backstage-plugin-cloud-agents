@@ -37,9 +37,15 @@ export interface Config {
      * the current GitHub token of their run from
      * `<runnerBackendUrl>/api/cloud-agents/runner/github-token`. Falls back to
      * env CLOUD_AGENTS_RUNNER_BACKEND_URL. Without it, a pod keeps the
-     * `GH_TOKEN` it started with.
+     * `GH_TOKEN` it started with. Hub agents need it: their pods call the
+     * hub tools at `<runnerBackendUrl>/api/cloud-agents`.
      */
     runnerBackendUrl?: string;
+    /**
+     * How long a child's event waits for events of other children before it
+     * starts a run of the waiting hub, in ms. Default 5000.
+     */
+    hubWakeDelayMs?: number;
     /** How often a follower checks a pending pod, in ms. Default 2000. */
     pollIntervalMs?: number;
     /** Maximum wait for a runner container to start, in ms. Default 120000. */

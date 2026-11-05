@@ -124,7 +124,7 @@
   color: var(--ca-fg2);
 }
 
-/* Status pill: six states, a live dot, and a morph when the status changes. */
+/* Status pill: seven states, a live dot, and a morph when the status changes. */
 .pill {
   display: inline-flex;
   align-items: center;
@@ -163,6 +163,11 @@
 .pill[data-status='failed'] {
   color: var(--ca-danger);
   background: var(--ca-danger-soft);
+}
+.pill[data-status='waiting'] {
+  color: var(--ca-fg1);
+  background: var(--ca-s1);
+  box-shadow: inset 0 0 0 1px var(--ca-line2);
 }
 .pill[data-status='stopped'] {
   color: var(--ca-fg2);
@@ -335,6 +340,24 @@
     opacity: 0;
     transform: translateX(14px);
   }
+}
+
+.prLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--ca-s2);
+  color: var(--ca-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  transition: color var(--ca-fast), background-color var(--ca-fast);
+}
+
+.prLink:hover {
+  color: var(--ca-fg1);
+  background: var(--ca-s3);
 }
 
 /* Empty, error, and not-found states. */

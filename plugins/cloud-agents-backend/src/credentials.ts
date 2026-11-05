@@ -12,6 +12,10 @@ import { nowIso, type Db, type Store } from './store';
 
 /** A credential the user has not set, or that no longer works. */
 export class MissingCredentialError extends Error {
+  readonly name = 'MissingCredentialError';
+  /** Backstage's error handler answers with this status, for the actions. */
+  readonly statusCode = 422;
+
   constructor(readonly harness: Harness, readonly credential: CredentialName) {
     super(`missing ${credential} credential`);
   }

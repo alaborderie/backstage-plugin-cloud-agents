@@ -8,6 +8,8 @@ export interface RunSpec {
   workdir: string;
   home: string;
   askSocket: string;
+  /** A hub run: the `cloud_agent` server also offers the hub tools. */
+  hub: boolean;
 }
 
 export interface Invocation {
@@ -34,7 +36,7 @@ export const ASK_SERVER = 'cloud_agent';
 export const ASK_TOOL = 'ask_user';
 
 export function askCommand(spec: RunSpec): string[] {
-  return ['cloud-agent', 'mcp-ask', '--socket', spec.askSocket];
+  return ['cloud-agent', 'mcp-ask', '--socket', spec.askSocket, ...(spec.hub ? ['--hub'] : [])];
 }
 
 export const ASK_TOOL_DESCRIPTION =
@@ -43,6 +45,12 @@ export const ASK_TOOL_DESCRIPTION =
   'No one answers during this run. Set blocking to true when you cannot continue safely without ' +
   'the answer: then stop, summarize your progress, and end your turn; the answer arrives in a ' +
   'follow-up run on the same branch. Set blocking to false when you can proceed with a stated default.';
+
+/** What ask_user answers: version 1 never holds a run for an answer. */
+export const NO_REPLY =
+  'Recorded. No one can answer during this run. If the question is blocking, stop now: summarize your ' +
+  'progress and the question in your final message and end your turn. The answer will come in a follow-up ' +
+  'run on the same branch. Otherwise continue with the default you stated.';
 
 function options(value: unknown): { label: string; description: string | null }[] {
   return arr(value).map((o) =>
