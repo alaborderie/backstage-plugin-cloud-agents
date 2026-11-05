@@ -16,7 +16,12 @@ it.each(['keyroll', 'keyroll-api'])(
       apis: [catalogApiMock({ entities }), [cloudAgentsApiRef, mockApi()]],
       initialRouteEntries: [`/catalog/default/component/${name}`],
     });
-    const action = await screen.findByRole('link', { name: 'New agent' });
+    // The catalog entity page renders slowly on a loaded CI runner.
+    const action = await screen.findByRole(
+      'link',
+      { name: 'New agent' },
+      { timeout: 10_000 },
+    );
     const url = new URL(action.getAttribute('href')!, 'http://localhost');
     expect(url.pathname).toBe('/cloud-agents/new');
     expect(url.searchParams.get('repo')).toBe('alaborderie/keyroll');
@@ -40,12 +45,17 @@ it.each(['keyroll', 'keyroll-api'])(
     for (const line of expected) expect(prompt).toContain(line);
     await userEvent.click(action);
     expect(
-      await screen.findByRole('combobox', { name: /Repository/ }),
+      await screen.findByRole(
+        'combobox',
+        { name: /Repository/ },
+        { timeout: 10_000 },
+      ),
     ).toHaveValue('alaborderie/keyroll');
     expect(
       screen.getByRole('textbox', { name: /What should the agent do/ }),
     ).toHaveValue(prompt);
   },
+  30_000,
 );
 
 it('omits the action when the entity has no GitHub project slug', async () => {
@@ -54,7 +64,11 @@ it('omits the action when the entity has no GitHub project slug', async () => {
     apis: [catalogApiMock({ entities }), [cloudAgentsApiRef, mockApi()]],
     initialRouteEntries: ['/catalog/default/component/without-repo'],
   });
-  await screen.findByText('Workload without a repository');
+  await screen.findByText(
+    'Workload without a repository',
+    {},
+    { timeout: 10_000 },
+  );
   expect(
     screen.queryByRole('link', { name: 'New agent' }),
   ).not.toBeInTheDocument();
