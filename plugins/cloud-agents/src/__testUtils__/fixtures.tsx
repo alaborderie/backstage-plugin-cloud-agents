@@ -185,10 +185,10 @@ export const allAgents = [
   stopped,
 ];
 
-/** Credentials with every harness and GitHub set, except those named false. */
+/** Credentials with every credential and GitHub set, except those named false. */
 export function credentials(
   set: Partial<
-    Record<'claude' | 'codex' | 'opencode' | 'github', boolean>
+    Record<'claude' | 'codex' | 'opencode' | 'anthropic' | 'github', boolean>
   > = {},
 ): CredentialsSummary {
   const on = (name: keyof typeof set) => set[name] ?? true;
@@ -200,6 +200,7 @@ export function credentials(
       updatedAt: null,
     },
     opencode: { set: on('opencode'), updatedAt: null },
+    anthropic: { set: on('anthropic'), updatedAt: null },
     github: {
       connected: on('github'),
       login: on('github') ? 'acme-dev' : null,
@@ -214,6 +215,7 @@ export const unset = credentials({
   claude: false,
   codex: false,
   opencode: false,
+  anthropic: false,
   github: false,
 });
 

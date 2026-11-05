@@ -59,6 +59,7 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
       updatedAt: iso(minutesAgo(60 * 24 * 7)),
     },
     opencode: { set: false, updatedAt: null },
+    anthropic: { set: false, updatedAt: null },
     github: {
       connected: true,
       login: 'octo-dev',

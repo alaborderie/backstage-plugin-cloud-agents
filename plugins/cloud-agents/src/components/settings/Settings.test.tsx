@@ -6,6 +6,7 @@ import type {
   CredentialsSummary,
   PutCredentialRequest,
 } from '@alaborderie/plugin-cloud-agents-common';
+import { CloudAgentsApiError } from '../../api';
 import { mockApi, renderRoot, unset } from '../../__testUtils__/fixtures';
 
 /** A credentials store behind the mock API, like the backend's. */
@@ -127,7 +128,70 @@ describe('settings', () => {
         await screen.findByRole('button', { name: `Add ${title}` }),
       ).toBeInTheDocument();
     }
-    expect(screen.getAllByText('Not set')).toHaveLength(3);
+    expect(screen.getAllByText('Not set')).toHaveLength(4);
+  });
+
+  it('sets and clears the Anthropic API key, and shows why the API refused one', async () => {
+    const backing = store();
+    const putCredential = backing.putCredential;
+    const api = mockApi({
+      ...backing,
+      putCredential: jest.fn(
+        async (name: CredentialName, request: PutCredentialRequest) => {
+          if (request.value.startsWith('sk-ant-oat')) {
+            throw new CloudAgentsApiError(400, {
+              error: {
+                name: 'InputError',
+                message: 'This is a Claude Code setup-token, not an API key',
+              },
+            });
+          }
+          return putCredential(name, request);
+        },
+      ),
+    });
+    await renderRoot(api, '/cloud-agents/settings');
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Add Anthropic API key' }),
+    );
+    const form = screen.getByRole('form', {
+      name: 'Anthropic API key credential',
+    });
+    const field = within(form).getByLabelText('Anthropic API key value');
+    await userEvent.type(field, 'sk-ant-oat01-setup-token');
+    await userEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    expect(
+      await within(form).findByText(
+        'This is a Claude Code setup-token, not an API key',
+      ),
+    ).toBeInTheDocument();
+
+    await userEvent.clear(field);
+    await userEvent.type(field, `sk-ant-api03-${SECRET}`);
+    await userEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.putCredential).toHaveBeenLastCalledWith('anthropic', {
+        value: `sk-ant-api03-${SECRET}`,
+      }),
+    );
+    expect(
+      await screen.findByRole('button', { name: 'Replace Anthropic API key' }),
+    ).toBeInTheDocument();
+    expectSecretHidden();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Clear Anthropic API key' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Clear credential' }),
+    );
+    await waitFor(() =>
+      expect(api.deleteCredential).toHaveBeenCalledWith('anthropic'),
+    );
+    expect(
+      await screen.findByRole('button', { name: 'Add Anthropic API key' }),
+    ).toBeInTheDocument();
   });
 
   it('stores a GitHub token and disconnects', async () => {

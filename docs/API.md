@@ -38,7 +38,7 @@ Agent status: `queued | running | needs_input | succeeded | failed | stopped`.
   "harness": "claude | codex | opencode",
   "model": "slug",
   "effort": "high",
-  "parent": {"source": "t3", "threadId": "optional", "label": "optional"}
+  "parent": { "source": "t3", "threadId": "optional", "label": "optional" }
 }
 ```
 
@@ -54,13 +54,36 @@ Response `201`: the agent object.
 
 ```json
 {
-  "id": "ag_...", "title": "...", "repo": "owner/name", "base": "main",
-  "branch": "...", "harness": "...", "model": "...", "effort": "high",
-  "status": "running", "createdAt": "ISO", "updatedAt": "ISO",
-  "runs": [{"id": "run uuid", "status": "running|succeeded|failed|needs_input|stopped", "startedAt": "ISO", "finishedAt": null, "exitCode": null}],
-  "openQuestions": [{"questionId": "ask-1", "runId": "...", "question": "...", "options": ["..."]}],
+  "id": "ag_...",
+  "title": "...",
+  "repo": "owner/name",
+  "base": "main",
+  "branch": "...",
+  "harness": "...",
+  "model": "...",
+  "effort": "high",
+  "status": "running",
+  "createdAt": "ISO",
+  "updatedAt": "ISO",
+  "runs": [
+    {
+      "id": "run uuid",
+      "status": "running|succeeded|failed|needs_input|stopped",
+      "startedAt": "ISO",
+      "finishedAt": null,
+      "exitCode": null
+    }
+  ],
+  "openQuestions": [
+    {
+      "questionId": "ask-1",
+      "runId": "...",
+      "question": "...",
+      "options": ["..."]
+    }
+  ],
   "prUrl": null,
-  "parent": {"source": "t3", "threadId": "..."}
+  "parent": { "source": "t3", "threadId": "..." }
 }
 ```
 
@@ -126,7 +149,7 @@ with a ServiceAccount allowed to manage Jobs, Pods, Pods/log, and Secrets in
 
 - `PUT /me/credentials/github {"value": "<token>"}` stores a GitHub token directly (no refresh), for dev setups and Backstages without a GitHub App; `GET /me/credentials` then reports `github: {connected: true, login}`.
 - `DELETE /me/credentials/github` disconnects GitHub.
-The T3 bridge does not call these routes.
+  The T3 bridge does not call these routes.
 
 ## Additions approved by the hub
 
@@ -215,6 +238,7 @@ of the contract above ignore unknown fields and unknown event types.
   `summary` is the call's command, file path, pattern, URL, or description.
   `text` is the message's first line. Both are at most 200 characters. `ts` is
   the runner event's `ts`.
+
 - `POST /agents/:id/messages` adds a plugin event `agent.message`
   (`{"type": "agent.message", "text": "...", "ts": "ISO"}`) to the stream. Its
   envelope carries the `runId` of the run the message starts, and it comes
@@ -235,13 +259,21 @@ changes it alone. An executant that needs a change asks the hub.
   `prompt` is its objective. A hub has a repo, a base, and a branch like any
   agent. Its children use them as defaults.
 - The agent object gains:
+
   - `kind`: `"task"` or `"hub"`.
   - `parentId`: the id of the hub that created this agent, or `null`.
   - `children`: on a hub, one summary per child, oldest first. `[]` on a task.
 
   ```json
-  {"id": "ag_...", "title": "...", "status": "running", "branch": "...",
-   "prUrl": null, "openQuestions": 0, "updatedAt": "ISO"}
+  {
+    "id": "ag_...",
+    "title": "...",
+    "status": "running",
+    "branch": "...",
+    "prUrl": null,
+    "openQuestions": 0,
+    "updatedAt": "ISO"
+  }
   ```
 
 - `GET /agents` still returns every agent of the user, children included, each
@@ -315,16 +347,16 @@ On a hub run the runner's MCP server `cloud_agent` offers these tools next to
 pattern: `mcp__cloud_agent__create_child` (Claude Code),
 `cloud_agent/create_child` (Codex), `cloud_agent_create_child` (OpenCode).
 
-| Tool | Input | Output |
-| --- | --- | --- |
-| `create_child` | `{title, prompt, tier, repo?, base?, branch?}` | the child agent object |
-| `list_children` | `{}` | `{children: [<agent object>]}` |
-| `get_child` | `{id}` | `{agent, lastMessage}` |
-| `reply_child` | `{id, questionId, answer}` | the child agent object |
-| `message_child` | `{id, text}` | the child agent object |
-| `stop_child` | `{id}` | the child agent object |
-| `read_state` | `{}` | `{state}`, the last JSON written, or `null` |
-| `write_state` | `{state}` | `{}` |
+| Tool            | Input                                          | Output                                      |
+| --------------- | ---------------------------------------------- | ------------------------------------------- |
+| `create_child`  | `{title, prompt, tier, repo?, base?, branch?}` | the child agent object                      |
+| `list_children` | `{}`                                           | `{children: [<agent object>]}`              |
+| `get_child`     | `{id}`                                         | `{agent, lastMessage}`                      |
+| `reply_child`   | `{id, questionId, answer}`                     | the child agent object                      |
+| `message_child` | `{id, text}`                                   | the child agent object                      |
+| `stop_child`    | `{id}`                                         | the child agent object                      |
+| `read_state`    | `{}`                                           | `{state}`, the last JSON written, or `null` |
+| `write_state`   | `{state}`                                      | `{}`                                        |
 
 - `tier` is `flash`, `sol`, or `opus`. `repo` and `base` default to the hub's.
   `branch` defaults to `cloud-agent/<short id>`; give it to continue a branch.
@@ -347,14 +379,14 @@ pattern: `mcp__cloud_agent__create_child` (Claude Code),
 MCP and other backend plugins call them with `actionsServiceRef`. Ids are
 `cloud-agents:<name>`.
 
-| Action | Input | Output |
-| --- | --- | --- |
-| `create-agent` | `{repo, prompt, tier, base?, title?, kind?}` | `{agent}` |
-| `list-agents` | `{status?, parentId?, limit?}` | `{agents}` |
-| `get-agent` | `{id}` | `{agent, lastMessage}` |
-| `reply-to-agent` | `{id, questionId, answer}` | `{agent}` |
-| `send-agent-message` | `{id, text}` | `{agent}` |
-| `stop-agent` | `{id}` | `{agent}` |
+| Action               | Input                                        | Output                 |
+| -------------------- | -------------------------------------------- | ---------------------- |
+| `create-agent`       | `{repo, prompt, tier, base?, title?, kind?}` | `{agent}`              |
+| `list-agents`        | `{status?, parentId?, limit?}`               | `{agents}`             |
+| `get-agent`          | `{id}`                                       | `{agent, lastMessage}` |
+| `reply-to-agent`     | `{id, questionId, answer}`                   | `{agent}`              |
+| `send-agent-message` | `{id, text}`                                 | `{agent}`              |
+| `stop-agent`         | `{id}`                                       | `{agent}`              |
 
 - A user principal acts on that user's agents, with the same rules and errors
   as the HTTP routes.
@@ -439,3 +471,18 @@ What the plugin does where the hub contract leaves room.
   queue no wake event.
 - When a wake finds that the owner's harness or GitHub credential is gone,
   the hub fails with that error instead of sleeping forever.
+
+## Additions: the Anthropic API key (for the assistant plugin)
+
+These additions keep the API at version 1.
+
+- `GET /me/credentials` gains `"anthropic": {"set": bool, "updatedAt"}`.
+- `PUT /me/credentials/anthropic` `{"value": "sk-ant-api..."}` stores the
+  user's Anthropic API key, sealed like the other credentials. It answers `400`
+  for a Claude Code token (`sk-ant-oat...`), which is not an API key.
+  `DELETE /me/credentials/anthropic` clears it. No agent run receives it.
+- `POST /service/anthropic-key` `{"userEntityRef": "user:default/..."}` answers
+  `{"apiKey": "..." | null}`. It accepts only a service token whose subject is
+  `plugin:assistant`; a user token or another plugin gets `403`. The assistant
+  backend uses it for its reasoning tool, so the key never reaches a browser.
+  [docs/ASSISTANT.md](ASSISTANT.md) describes the assistant.

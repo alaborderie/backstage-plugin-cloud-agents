@@ -186,8 +186,12 @@ export interface MessageRequest {
   text: string;
 }
 
-/** The credentials a user can store. `github` also has a web flow. */
-export type CredentialName = Harness | 'github';
+/**
+ * The credentials a user can store. `github` also has a web flow. `anthropic`
+ * is an Anthropic API key for the assistant plugin's reasoning tool; no run
+ * uses it.
+ */
+export type CredentialName = Harness | 'github' | 'anthropic';
 
 export type CodexCredentialKind = 'api_key' | 'auth_json';
 
@@ -206,6 +210,7 @@ export interface CredentialsSummary {
     updatedAt: string | null;
   };
   opencode: { set: boolean; updatedAt: string | null };
+  anthropic: { set: boolean; updatedAt: string | null };
   github: {
     connected: boolean;
     login: string | null;

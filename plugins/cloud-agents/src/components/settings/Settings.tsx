@@ -30,7 +30,6 @@ import type {
   CreatedAccessToken,
   CredentialName,
   CredentialsSummary,
-  Harness,
 } from '@alaborderie/plugin-cloud-agents-common';
 import { cloudAgentsApiRef } from '../../api';
 import { ago, shortDate } from '../../format';
@@ -80,7 +79,9 @@ function Status(props: { ok: boolean; children: ReactNode; meta?: ReactNode }) {
   );
 }
 
-const HARNESS_HELP: Record<Harness, ReactNode> = {
+type SecretName = Exclude<CredentialName, 'github'>;
+
+const SECRET_HELP: Record<SecretName, ReactNode> = {
   claude: (
     <>
       The token printed by <span className={ui.mono}>claude setup-token</span>.
@@ -93,22 +94,32 @@ const HARNESS_HELP: Record<Harness, ReactNode> = {
     </>
   ),
   opencode: 'An OpenCode Go API key from the OpenCode console.',
+  anthropic: (
+    <>
+      An API key from <span className={ui.mono}>console.anthropic.com</span>,
+      starting with <span className={ui.mono}>sk-ant-api</span>. A Claude Code
+      setup-token (<span className={ui.mono}>sk-ant-oat</span>) does not work
+      here.
+    </>
+  ),
 };
 
-const HARNESS_TITLE: Record<Harness, string> = {
+const SECRET_TITLE: Record<SecretName, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   opencode: 'OpenCode Go',
+  anthropic: 'Anthropic API key',
 };
 
-const HARNESS_LETTER: Record<Harness, string> = {
+const SECRET_LETTER: Record<SecretName, string> = {
   claude: 'C',
   codex: 'X',
   opencode: 'O',
+  anthropic: 'A',
 };
 
-function HarnessRow(props: {
-  name: Harness;
+function SecretRow(props: {
+  name: SecretName;
   summary: CredentialsSummary;
   open: Open;
   setOpen(open: Open): void;
@@ -123,7 +134,18 @@ function HarnessRow(props: {
   const tierText = tiers.length
     ? `the ${tiers.join(', ')} tier${tiers.length > 1 ? 's' : ''}`
     : `the ${name} harness`;
-  const title = HARNESS_TITLE[name];
+  const impact =
+    name === 'anthropic'
+      ? {
+          unset: 'the Assistant cannot ask Claude Opus 5.5',
+          cleared:
+            'The Assistant cannot ask Claude Opus 5.5 until you add it again.',
+        }
+      : {
+          unset: `${tierText} cannot start`,
+          cleared: `Agents on ${tierText} will fail to start until you add it again.`,
+        };
+  const title = SECRET_TITLE[name];
   const credential = summary[name];
   const [value, setValue] = useState('');
   const [kind, setKind] = useState<CodexCredentialKind>(
@@ -177,7 +199,7 @@ function HarnessRow(props: {
   return (
     <div className={styles.row} data-credential={name}>
       <span className={styles.glyph} aria-hidden="true">
-        {HARNESS_LETTER[name]}
+        {SECRET_LETTER[name]}
       </span>
       <div className={styles.rowMain}>
         <div className={styles.name}>{title}</div>
@@ -192,7 +214,7 @@ function HarnessRow(props: {
             Set{kindLabel}
           </Status>
         ) : (
-          <Status ok={false} meta={`${tierText} cannot start`}>
+          <Status ok={false} meta={impact.unset}>
             Not set
           </Status>
         )}
@@ -248,7 +270,7 @@ function HarnessRow(props: {
               </ToggleButton>
             </ToggleButtonGroup>
           )}
-          <div className={styles.help}>{HARNESS_HELP[name]}</div>
+          <div className={styles.help}>{SECRET_HELP[name]}</div>
           {name === 'codex' && kind === 'auth_json' ? (
             <TextAreaField
               aria-label={`${title} value`}
@@ -295,8 +317,7 @@ function HarnessRow(props: {
       {confirming && (
         <div ref={confirmRef} className={styles.edit}>
           <InlineAlert tone="error">
-            Clear the {title} credential? Agents on {tierText} will fail to
-            start until you add it again.
+            Clear the {title} credential? {impact.cleared}
           </InlineAlert>
           {saver.error && (
             <InlineAlert tone="error">{saver.error.message}</InlineAlert>
@@ -781,7 +802,7 @@ export function Settings() {
         <div className={`${ui.card} ${styles.list}`}>
           {current
             ? (['claude', 'codex', 'opencode'] as const).map(name => (
-                <HarnessRow
+                <SecretRow
                   key={name}
                   name={name}
                   summary={current}
@@ -791,6 +812,26 @@ export function Settings() {
                 />
               ))
             : [0, 1, 2].map(i => <SkeletonRow key={i} />)}
+        </div>
+      </section>
+      <section className={styles.sec} aria-labelledby="set-assistant">
+        <h2 id="set-assistant">Assistant</h2>
+        <p>
+          The Assistant's reasoning tool calls Claude Opus 5.5 with your own
+          Anthropic API key. No agent run uses it.
+        </p>
+        <div className={`${ui.card} ${styles.list}`}>
+          {current ? (
+            <SecretRow
+              name="anthropic"
+              summary={current}
+              open={open}
+              setOpen={setOpen}
+              onSaved={setSummary}
+            />
+          ) : (
+            <SkeletonRow />
+          )}
         </div>
       </section>
       <section className={styles.sec} aria-labelledby="set-tokens">
