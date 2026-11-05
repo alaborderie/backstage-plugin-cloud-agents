@@ -17,6 +17,10 @@ import {
 } from '@backstage/plugin-app-react';
 import cloudAgentsPlugin, { cloudAgentsApiRef } from '../src';
 import { MockCloudAgentsApi } from './mockApi';
+import catalogPlugin from '@backstage/plugin-catalog/alpha';
+import { catalogApiRef } from '@backstage/plugin-catalog-react';
+import { InMemoryCatalogClient } from '@backstage/catalog-client/testUtils';
+import { entities } from './entities';
 
 /*
  * `?mock` on any page switches this tab to invented data and a scripted live
@@ -73,9 +77,23 @@ const mockApi = ApiBlueprint.make({
 const app = createApp({
   features: [
     cloudAgentsPlugin,
+    catalogPlugin,
     createFrontendModule({ pluginId: 'app', extensions: [noNav] }),
     ...(mock
       ? [
+          createFrontendModule({
+            pluginId: 'catalog',
+            extensions: [
+              ApiBlueprint.make({
+                params: defineParams =>
+                  defineParams({
+                    api: catalogApiRef,
+                    deps: {},
+                    factory: () => new InMemoryCatalogClient({ entities }),
+                  }),
+              }),
+            ],
+          }),
           createFrontendModule({ pluginId: 'app', extensions: [mockSignIn] }),
           createFrontendModule({
             pluginId: 'cloud-agents',
