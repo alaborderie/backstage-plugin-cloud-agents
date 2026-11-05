@@ -70,6 +70,7 @@ jobs:
           test "$(docker run --rm cloud-agent-runner:ci version)" = "${{ steps.version.outputs.value }}"
           docker run --rm cloud-agent-runner:ci sh -c 'claude --version && codex --version && opencode --version && gh --version && id -u' | tee versions.txt
           test "$(tail -1 versions.txt)" = 10001
+          docker run --rm cloud-agent-runner:ci /opt/cloud-agent/scripts/check-toolchain.sh
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v4
         with:

@@ -18,6 +18,12 @@ const PASSTHROUGH_ENV = [
   'NODE_EXTRA_CA_CERTS',
   'CLAUDE_PLUGINS_DIR',
   'CLAUDE_PLUGINS_REF',
+  // Where the image's build tools live (see the Dockerfile). Without them rustup finds no toolchain.
+  'RUSTUP_HOME',
+  'CARGO_HOME',
+  'PLAYWRIGHT_BROWSERS_PATH',
+  'NODE_PATH',
+  'PIP_BREAK_SYSTEM_PACKAGES',
 ];
 
 /** The environment every child process gets: no credentials. Callers add the one credential a child needs. */
