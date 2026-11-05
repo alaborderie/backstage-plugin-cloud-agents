@@ -33,5 +33,5 @@ The page needs two backend plugins:
 - `@alaborderie/plugin-cloud-agents-backend`. The assistant lists, starts, and
   follows agents through it, and the page reads each agent card from
   `/api/cloud-agents`. Install the `@alaborderie/plugin-cloud-agents` frontend
-  too: agent cards link to its pages, and its Settings tab holds the Anthropic
-  API key the reasoning tool uses.
+  too: agent cards link to its pages, and its Settings tab holds the Claude
+  Code credential the reasoning tool uses.

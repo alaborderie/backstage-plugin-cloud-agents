@@ -1,4 +1,8 @@
 import type { Config } from '@backstage/config';
+import type { ClaudeCodeOptions } from './reasoning';
+
+/** How long one reasoning call may run before the tool reports a timeout. */
+const REASONING_TIMEOUT_MS = 5 * 60 * 1000;
 
 export interface AssistantConfig {
   chatModel: {
@@ -7,7 +11,7 @@ export interface AssistantConfig {
     baseUrl: string;
     model: string;
   };
-  reasoningModel: string;
+  reasoningModel: ClaudeCodeOptions;
 }
 
 export function readAssistantConfig(
@@ -28,8 +32,14 @@ export function readAssistantConfig(
         config.getOptionalString('assistant.chatModel.model') ??
         'deepseek-v4.1-flash',
     },
-    reasoningModel:
-      config.getOptionalString('assistant.reasoningModel.model') ??
-      'claude-opus-5-5',
+    reasoningModel: {
+      model:
+        config.getOptionalString('assistant.reasoningModel.model') ??
+        'claude-opus-5-5',
+      claudePath:
+        config.getOptionalString('assistant.reasoningModel.claudePath') ??
+        'claude',
+      timeoutMs: REASONING_TIMEOUT_MS,
+    },
   };
 }

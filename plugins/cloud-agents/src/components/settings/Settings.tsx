@@ -85,6 +85,7 @@ const SECRET_HELP: Record<SecretName, ReactNode> = {
   claude: (
     <>
       The token printed by <span className={ui.mono}>claude setup-token</span>.
+      The Assistant also uses it to ask Claude Opus 5.5.
     </>
   ),
   codex: (
@@ -96,10 +97,12 @@ const SECRET_HELP: Record<SecretName, ReactNode> = {
   opencode: 'An OpenCode Go API key from the OpenCode console.',
   anthropic: (
     <>
-      An API key from <span className={ui.mono}>console.anthropic.com</span>,
-      starting with <span className={ui.mono}>sk-ant-api</span>. A Claude Code
-      setup-token (<span className={ui.mono}>sk-ant-oat</span>) does not work
-      here.
+      Optional. An API key from{' '}
+      <span className={ui.mono}>console.anthropic.com</span>, starting with{' '}
+      <span className={ui.mono}>sk-ant-api</span>, used only when no Claude Code
+      credential is set. A Claude Code setup-token (
+      <span className={ui.mono}>sk-ant-oat</span>) goes in the Claude Code
+      credential instead.
     </>
   ),
 };
@@ -137,9 +140,12 @@ function SecretRow(props: {
   const impact =
     name === 'anthropic'
       ? {
-          unset: 'the Assistant cannot ask Claude Opus 5.5',
-          cleared:
-            'The Assistant cannot ask Claude Opus 5.5 until you add it again.',
+          unset: summary.claude.set
+            ? 'optional, the Assistant uses your Claude Code credential'
+            : 'the Assistant needs this or a Claude Code credential to ask Claude Opus 5.5',
+          cleared: summary.claude.set
+            ? 'The Assistant keeps using your Claude Code credential.'
+            : 'The Assistant cannot ask Claude Opus 5.5 until you add a Claude Code credential or this key.',
         }
       : {
           unset: `${tierText} cannot start`,
@@ -817,8 +823,9 @@ export function Settings() {
       <section className={styles.sec} aria-labelledby="set-assistant">
         <h2 id="set-assistant">Assistant</h2>
         <p>
-          The Assistant's reasoning tool calls Claude Opus 5.5 with your own
-          Anthropic API key. No agent run uses it.
+          The Assistant's reasoning tool runs Claude Opus 5.5 through Claude
+          Code with your Claude Code credential above. Without one, it uses this
+          Anthropic API key. No agent run uses the key.
         </p>
         <div className={`${ui.card} ${styles.list}`}>
           {current ? (

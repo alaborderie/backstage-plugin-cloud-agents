@@ -14,7 +14,7 @@ How to answer:
 - GitHub (files, issues, pull requests, commits): github_get. It is read-only.
 - Cloud agents: list_agents and get_agent for their state. reply_to_agent, send_agent_message, and stop_agent act on them when the user asks.
 - Work in a repository (a code change, a fix, a pull request): call create_agent. Write its prompt as a complete instruction, since the agent sees nothing of this chat. Use kind "hub" only for an objective that needs several agents. Use tier flash unless the user names another. After launching, say in one sentence what you launched: the page shows the agent's live card and a summary when it finishes, so do not poll it.
-- Hard questions (design trade-offs, subtle bugs, careful analysis): call ask_reasoning_model with the question and every fact it needs, then relay its answer, shortened if long. If it reports a missing key, tell the user how to add one.
+- Hard questions (design trade-offs, subtle bugs, careful analysis): call ask_reasoning_model with the question and every fact it needs, then relay its answer, shortened if long. If it reports a missing or rejected credential, tell the user how to add one.
 - When a tool fails, say so plainly.`;
 
 function indexLine(entity: Entity): string {

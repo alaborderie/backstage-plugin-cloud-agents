@@ -199,13 +199,17 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
     ]).toEqual([false, false, false, false]);
   });
 
-  it('gives the Anthropic API key to the assistant plugin only, and refuses a Claude Code token', async () => {
+  it('gives the assistant plugin only the Claude Code token first, else the Anthropic API key, and refuses a Claude Code token as a key', async () => {
     const apiKey = 'sk-ant-api03-SECRET-assistant';
     const forAssistant = serviceHeader('plugin:assistant');
-    const readKey = (auth: string, userEntityRef = 'user:default/alice') =>
-      api('POST', '/service/anthropic-key', { userEntityRef }, auth);
+    const readCredential = (
+      auth: string,
+      userEntityRef = 'user:default/alice',
+    ) => api('POST', '/service/reasoning-credential', { userEntityRef }, auth);
 
-    expect((await readKey(forAssistant)).body).toEqual({ apiKey: null });
+    expect((await readCredential(forAssistant)).body).toEqual({
+      credential: null,
+    });
     expect(
       (await api('PUT', '/me/credentials/anthropic', { value: CLAUDE_TOKEN }))
         .status,
@@ -219,16 +223,27 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
     expect(JSON.stringify(await knex('credentials').select())).not.toContain(
       apiKey,
     );
-
-    expect((await readKey(forAssistant)).body).toEqual({ apiKey });
-    expect((await readKey(forAssistant, 'user:default/bob')).body).toEqual({
-      apiKey: null,
+    expect((await readCredential(forAssistant)).body).toEqual({
+      credential: { kind: 'api_key', apiKey },
     });
-    expect((await readKey(ALICE)).status).toBe(403);
-    expect((await readKey(serviceHeader('plugin:catalog'))).status).toBe(403);
 
+    await api('PUT', '/me/credentials/claude', { value: CLAUDE_TOKEN });
+    expect((await readCredential(forAssistant)).body).toEqual({
+      credential: { kind: 'claude_code', oauthToken: CLAUDE_TOKEN },
+    });
+    expect(
+      (await readCredential(forAssistant, 'user:default/bob')).body,
+    ).toEqual({ credential: null });
+    expect((await readCredential(ALICE)).status).toBe(403);
+    expect((await readCredential(serviceHeader('plugin:catalog'))).status).toBe(
+      403,
+    );
+
+    await api('DELETE', '/me/credentials/claude');
     await api('DELETE', '/me/credentials/anthropic');
-    expect((await readKey(forAssistant)).body).toEqual({ apiKey: null });
+    expect((await readCredential(forAssistant)).body).toEqual({
+      credential: null,
+    });
   });
 
   it('rejects a codex credential without kind and a GitHub token GitHub does not accept', async () => {

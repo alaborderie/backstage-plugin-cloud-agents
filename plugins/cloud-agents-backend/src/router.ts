@@ -76,9 +76,9 @@ const credentialName = z.enum([
   'github',
   'anthropic',
 ]);
-const anthropicKeyBody = z.object({ userEntityRef: nonEmpty });
+const reasoningCredentialBody = z.object({ userEntityRef: nonEmpty });
 
-/** The only caller of `POST /service/anthropic-key`. */
+/** The only caller of `POST /service/reasoning-credential`. */
 const ASSISTANT_SUBJECT = 'plugin:assistant';
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
@@ -330,13 +330,17 @@ export function createRouter(deps: RouterDeps): express.Router {
     res.json(await credentials.summary(owner));
   });
 
-  router.post('/service/anthropic-key', async (req, res) => {
+  router.post('/service/reasoning-credential', async (req, res) => {
     const creds = await httpAuth.credentials(req, { allow: ['service'] });
     if (creds.principal.subject !== ASSISTANT_SUBJECT) {
-      throw new NotAllowedError('Only the assistant plugin reads this key');
+      throw new NotAllowedError(
+        'Only the assistant plugin reads this credential',
+      );
     }
-    const { userEntityRef } = parse(anthropicKeyBody, req.body);
-    res.json({ apiKey: await credentials.anthropicKey(userEntityRef) });
+    const { userEntityRef } = parse(reasoningCredentialBody, req.body);
+    res.json({
+      credential: await credentials.reasoningCredential(userEntityRef),
+    });
   });
 
   router.get('/me/github/connect', async (req, res) => {

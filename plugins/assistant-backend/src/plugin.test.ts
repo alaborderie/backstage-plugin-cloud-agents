@@ -1,5 +1,8 @@
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import express from 'express';
 import {
   coreServices,
@@ -84,7 +87,42 @@ class FakeChatModel {
 
 const agents = new Map<string, Record<string, unknown>>();
 
-/** Stands in for cloud-agents: its actions and its key route. */
+const OAUTH_TOKEN = 'sk-ant-oat01-SECRET-alice';
+let reasoningCredential: object | null = null;
+
+/**
+ * Stands in for the Claude Code CLI: records how it was started next to
+ * itself, then prints the JSON result `claude --print` would.
+ */
+const fakeClaudeDir = mkdtempSync(join(tmpdir(), 'fake-claude-'));
+const fakeClaude = join(fakeClaudeDir, 'claude');
+writeFileSync(
+  fakeClaude,
+  `#!/usr/bin/env node
+const fs = require('node:fs');
+let input = '';
+process.stdin.on('data', d => { input += d; }).on('end', () => {
+  fs.writeFileSync(${JSON.stringify(
+    join(fakeClaudeDir, 'call.json'),
+  )}, JSON.stringify({
+    argv: process.argv.slice(2),
+    env: process.env,
+    cwd: process.cwd(),
+    cwdEntries: fs.readdirSync(process.cwd()),
+    input,
+  }));
+  process.stdout.write(JSON.stringify({
+    type: 'result',
+    is_error: false,
+    result: 'Nobody knows yet.',
+    modelUsage: { 'claude-opus-5-5': {} },
+  }));
+});
+`,
+  { mode: 0o755 },
+);
+
+/** Stands in for cloud-agents: its actions and its credential route. */
 const fakeCloudAgents = createBackendPlugin({
   pluginId: 'cloud-agents',
   register(env) {
@@ -153,11 +191,13 @@ const fakeCloudAgents = createBackendPlugin({
         });
         const router = express.Router();
         router.use(express.json());
-        router.post('/service/anthropic-key', async (req, res) => {
+        router.post('/service/reasoning-credential', async (req, res) => {
           const creds = await httpAuth.credentials(req, { allow: ['service'] });
           res.json({
-            apiKey:
-              creds.principal.subject === 'plugin:assistant' ? null : 'wrong',
+            credential:
+              creds.principal.subject === 'plugin:assistant'
+                ? reasoningCredential
+                : 'wrong',
           });
         });
         httpRouter.use(router);
@@ -203,6 +243,7 @@ describe.each(databases.eachSupportedId())(
               backend: { actions: { pluginSources: ['cloud-agents'] } },
               assistant: {
                 chatModel: { apiKey: 'test-key', baseUrl: modelUrl },
+                reasoningModel: { claudePath: fakeClaude },
               },
             },
           }),
@@ -387,7 +428,71 @@ describe.each(databases.eachSupportedId())(
       ).toBe(404);
     });
 
-    it('tells the user how to add an Anthropic key when the reasoning tool has none', async () => {
+    it('answers the reasoning tool through Claude Code with the Claude Code token, isolated', async () => {
+      reasoningCredential = { kind: 'claude_code', oauthToken: OAUTH_TOKEN };
+      process.env.BACKEND_ONLY_SECRET = 'must-not-reach-claude';
+      model.script.push(
+        {
+          toolCall: {
+            name: 'ask_reasoning_model',
+            arguments: { question: 'Is P equal to NP?', context: 'No proof.' },
+          },
+        },
+        { text: 'Opus says nobody knows.' },
+      );
+      try {
+        const { body: conversation } = await api('POST', '/conversations', {});
+        const events = await send(conversation.id, 'Ask Opus about P vs NP');
+        const tool = [...itemsOf(events).values()].find(i => i.type === 'tool');
+        expect(tool).toMatchObject({
+          status: 'done',
+          output: {
+            answer: 'Nobody knows yet.',
+            model: 'claude-opus-5-5',
+            credential: 'claude_code',
+          },
+        });
+        const stored = await api('GET', `/conversations/${conversation.id}`);
+        expect(JSON.stringify(stored.body)).not.toContain(OAUTH_TOKEN);
+      } finally {
+        reasoningCredential = null;
+        delete process.env.BACKEND_ONLY_SECRET;
+      }
+
+      const call = JSON.parse(
+        readFileSync(join(fakeClaudeDir, 'call.json'), 'utf8'),
+      );
+      expect(call.input).toBe(
+        'Is P equal to NP?\n\n<context>\nNo proof.\n</context>',
+      );
+      expect(call.argv).toEqual(
+        expect.arrayContaining(['--print', '--model', 'claude-opus-5-5']),
+      );
+      expect(call.argv[call.argv.indexOf('--tools') + 1]).toBe('');
+      expect(call.argv).toContain('--strict-mcp-config');
+      expect(call.argv[call.argv.indexOf('--setting-sources') + 1]).toBe('');
+      expect(
+        Object.keys(call.env)
+          .filter(name => name !== 'PWD')
+          .sort(),
+      ).toEqual([
+        'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+        'CLAUDE_CODE_OAUTH_TOKEN',
+        'CLAUDE_CONFIG_DIR',
+        'DISABLE_AUTOUPDATER',
+        'HOME',
+        'PATH',
+        'TMPDIR',
+      ]);
+      expect(call.env.CLAUDE_CODE_OAUTH_TOKEN).toBe(OAUTH_TOKEN);
+      expect(call.cwdEntries).toEqual([]);
+      expect(call.env.HOME.startsWith(call.env.TMPDIR)).toBe(true);
+      expect(call.env.CLAUDE_CONFIG_DIR.startsWith(call.env.HOME)).toBe(true);
+      expect(call.cwd.startsWith(call.env.TMPDIR)).toBe(true);
+      expect(() => readdirSync(call.env.TMPDIR)).toThrow(/ENOENT/);
+    });
+
+    it('tells the user how to add a Claude Code credential when the reasoning tool has none', async () => {
       model.script.push(
         {
           toolCall: {
@@ -403,10 +508,10 @@ describe.each(databases.eachSupportedId())(
       expect(tool).toMatchObject({
         name: 'ask_reasoning_model',
         status: 'done',
-        output: { error: 'missing_anthropic_key' },
+        output: { error: 'missing_claude_credential' },
       });
       expect(JSON.stringify((tool as any).output)).toContain(
-        '/cloud-agents/settings',
+        'claude setup-token',
       );
     });
 

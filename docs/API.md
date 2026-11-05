@@ -481,8 +481,13 @@ These additions keep the API at version 1.
   user's Anthropic API key, sealed like the other credentials. It answers `400`
   for a Claude Code token (`sk-ant-oat...`), which is not an API key.
   `DELETE /me/credentials/anthropic` clears it. No agent run receives it.
-- `POST /service/anthropic-key` `{"userEntityRef": "user:default/..."}` answers
-  `{"apiKey": "..." | null}`. It accepts only a service token whose subject is
-  `plugin:assistant`; a user token or another plugin gets `403`. The assistant
-  backend uses it for its reasoning tool, so the key never reaches a browser.
+- `POST /service/reasoning-credential` `{"userEntityRef": "user:default/..."}`
+  answers `{"credential": {"kind": "claude_code", "oauthToken": "..."}}` when
+  the user has a `claude` credential, else
+  `{"credential": {"kind": "api_key", "apiKey": "..."}}` when they have an
+  `anthropic` one, else `{"credential": null}`. It accepts only a service token
+  whose subject is `plugin:assistant`; a user token or another plugin gets
+  `403`. The assistant backend uses it for its reasoning tool, so no credential
+  reaches a browser. It replaces `POST /service/anthropic-key`, whose only
+  caller was that backend.
   [docs/ASSISTANT.md](ASSISTANT.md) describes the assistant.
