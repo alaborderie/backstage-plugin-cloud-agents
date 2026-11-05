@@ -15,6 +15,7 @@ import { RiRobot2Line } from '@remixicon/react';
 import { CloudAgentsClient, cloudAgentsApiRef } from './api';
 import { rootRouteRef } from './routes';
 import { cloudAgentsHomeWidget } from './widget';
+import { cloudAgentsEntityAction } from './entityAction';
 
 const cloudAgentsApi = ApiBlueprint.make({
   params: defineParams =>
@@ -48,7 +49,12 @@ export const cloudAgentsPlugin = createFrontendPlugin({
   title: 'Cloud agents',
   icon: <RiRobot2Line />,
   routes: { root: rootRouteRef },
-  extensions: [cloudAgentsApi, cloudAgentsPage, cloudAgentsHomeWidget],
+  extensions: [
+    cloudAgentsApi,
+    cloudAgentsPage,
+    cloudAgentsHomeWidget,
+    cloudAgentsEntityAction,
+  ],
 });
 
 const legacyRootRouteRef = createLegacyRouteRef({ id: 'cloud-agents' });

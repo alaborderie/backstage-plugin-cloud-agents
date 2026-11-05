@@ -146,6 +146,35 @@ describe('new agent form', () => {
     );
   });
 
+  it.each([
+    [
+      '/cloud-agents/new?repo=alaborderie/keyroll',
+      'alaborderie/keyroll',
+      '',
+      '',
+    ],
+    [
+      '/cloud-agents/new?repo=alaborderie/keyroll&title=T&prompt=P',
+      'alaborderie/keyroll',
+      'T',
+      'P',
+    ],
+    ['/cloud-agents/new?repo=not-a-repo&title=T&prompt=P', '', 'T', 'P'],
+  ])('prefills repository links at %s', async (path, repo, title, brief) => {
+    await renderRoot(mockApi(), path);
+    expect(
+      await screen.findByRole('combobox', { name: /Repository/ }),
+    ).toHaveValue(repo);
+    expect(prompt()).toHaveValue(brief);
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Branch, title and custom model' }),
+    );
+    expect(screen.getByRole('textbox', { name: /Title/ })).toHaveValue(title);
+    expect(
+      screen.queryByRole('button', { name: 'Start without the issue' }),
+    ).not.toBeInTheDocument();
+  });
+
   describe('from an issue deep link', () => {
     const path =
       '/cloud-agents/new?repo=acme/garden-app&issue=42&title=Fix%20the%20login%20redirect';

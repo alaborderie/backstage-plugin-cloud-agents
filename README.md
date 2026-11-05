@@ -53,6 +53,7 @@ These steps assume the new backend system and the new frontend system, as in a B
    The UI reads only Backstage UI (BUI) CSS variables, so it follows the app's theme. The app must load `@backstage/ui/css/styles.css`, as apps created from the current template do. Tertiary text reads `--ember-fg-tertiary` and falls back to `--bui-fg-secondary`.
 
    Other pages can link to `/cloud-agents/new?repo=<owner>/<name>&issue=<number>&title=<issue title>`. The form opens with that repository, the title, and a prompt that points at the issue.
+   Repository links can omit `issue` and supply optional `title` and `prompt`, such as `/cloud-agents/new?repo=alaborderie/keyroll&title=T&prompt=P`. Catalog entities with `github.com/project-slug` get a visible **New agent** action on their overview in the new frontend system. It prefills repository and entity context and leaves the task for you to write. See the [frontend README](plugins/cloud-agents/README.md) for parameters and the Ember preview routes.
 
 4. Set the configuration below, create the namespace and the RBAC, and register the GitHub App callback.
 

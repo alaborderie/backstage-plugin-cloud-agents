@@ -82,6 +82,17 @@ export function issueFromSearch(search: string): FromIssue | undefined {
   };
 }
 
+export function prefillFromSearch(search: string) {
+  const params = new URLSearchParams(search);
+  const repo = params.get('repo')?.trim() ?? '';
+  const issue = issueFromSearch(search);
+  return {
+    repo: REPO_PATTERN.test(repo) ? repo : '',
+    title: issue?.title ?? params.get('title')?.trim() ?? '',
+    prompt: issue ? issuePrompt(issue) : params.get('prompt') ?? '',
+  };
+}
+
 export function issuePrompt(issue: FromIssue): string {
   return `Resolve ${issue.url}${issue.title ? `: ${issue.title}` : ''}
 
@@ -169,16 +180,13 @@ export function NewAgent() {
     [location.search],
   );
   const prefill = useMemo(
-    () => ({
-      prompt: issue ? issuePrompt(issue) : '',
-      title: issue?.title ?? '',
-    }),
-    [issue],
+    () => prefillFromSearch(location.search),
+    [location.search],
   );
   const [showIssue, setShowIssue] = useState(Boolean(issue));
   const [form, setForm] = useState<Form>(() => ({
     prompt: prefill.prompt,
-    repo: issue?.repo ?? '',
+    repo: prefill.repo,
     tier: tiers[0]?.name ?? '',
     title: prefill.title,
     base: 'main',
