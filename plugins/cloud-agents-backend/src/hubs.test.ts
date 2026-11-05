@@ -99,7 +99,6 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
     });
   }
 
-
   function agentWhen(
     id: string,
     predicate: (a: Agent) => boolean,
@@ -332,7 +331,8 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
       prompt: 'Unrelated',
       tier: 'flash',
     });
-    const taskToken = (await runSecret(other.runs[0].id)).CLOUD_AGENT_RUN_TOKEN!;
+    const taskToken = (await runSecret(other.runs[0].id))
+      .CLOUD_AGENT_RUN_TOKEN!;
 
     for (const [name, input] of [
       ['get-agent', { id: other.id }],
