@@ -334,7 +334,6 @@ function Loaded(props: { agent: Agent; reload(): void }) {
   );
   const [unseen, setUnseen] = useState(0);
   const logRef = useRef<HTMLOListElement>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
   const prCardRef = useRef<HTMLDivElement>(null);
   const heightBefore = useRef<number | undefined>(undefined);
   const seenSeq = useRef<number | undefined>(undefined);
@@ -365,8 +364,9 @@ function Loaded(props: { agent: Agent; reload(): void }) {
       : undefined;
 
   const scrollToEnd = useCallback(() => {
-    composerRef.current?.scrollIntoView({
-      block: 'end',
+    const scroller = scrollParent(logRef.current);
+    scroller.scrollTo({
+      top: scroller.scrollHeight,
       behavior: reduced ? 'auto' : 'smooth',
     });
   }, [reduced]);
@@ -376,11 +376,20 @@ function Loaded(props: { agent: Agent; reload(): void }) {
     const target: HTMLElement | Window =
       scroller === document.scrollingElement ? window : scroller;
     const onScroll = () => {
+      heightBefore.current = scroller.scrollHeight;
       if (nearBottom(scroller)) setUnseen(0);
     };
     onScroll();
     target.addEventListener('scroll', onScroll, { passive: true });
-    return () => target.removeEventListener('scroll', onScroll);
+    // An opened or closed output changes the height between events.
+    const resized = new ResizeObserver(() => {
+      heightBefore.current = scroller.scrollHeight;
+    });
+    if (logRef.current) resized.observe(logRef.current);
+    return () => {
+      target.removeEventListener('scroll', onScroll);
+      resized.disconnect();
+    };
   }, []);
 
   const lastSeq = stream.events[stream.events.length - 1]?.seq ?? 0;
@@ -497,7 +506,7 @@ function Loaded(props: { agent: Agent; reload(): void }) {
               </button>
             </div>
           )}
-          <div ref={composerRef} className={styles.composerHost}>
+          <div className={styles.composerHost}>
             <Composer
               agent={agent}
               questionEvents={questions}
