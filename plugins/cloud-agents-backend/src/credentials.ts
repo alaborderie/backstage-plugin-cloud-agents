@@ -108,6 +108,10 @@ export class CredentialService {
         set: rows.has('opencode'),
         updatedAt: rows.get('opencode')?.updated_at ?? null,
       },
+      anthropic: {
+        set: rows.has('anthropic'),
+        updatedAt: rows.get('anthropic')?.updated_at ?? null,
+      },
       github: {
         connected: rows.has('github'),
         login: github.login ?? null,
@@ -144,6 +148,23 @@ export class CredentialService {
       meta.kind = kind;
     }
     await this.write(owner, harness, value, meta);
+  }
+
+  async putAnthropicKey(owner: string, key: string): Promise<void> {
+    if (key.startsWith('sk-ant-oat')) {
+      throw new InputError(
+        'This is a Claude Code token, not an API key. Create an API key at console.anthropic.com.',
+      );
+    }
+    await this.write(owner, 'anthropic', key, {});
+  }
+
+  /** The user's Anthropic API key, for the assistant plugin's backend only. */
+  async anthropicKey(owner: string): Promise<string | null> {
+    const row = await this.store.getCredential(owner, 'anthropic');
+    return row
+      ? this.cipher.open(row.sealed, this.aad(owner, 'anthropic'))
+      : null;
   }
 
   async putGithubToken(owner: string, token: string): Promise<string> {

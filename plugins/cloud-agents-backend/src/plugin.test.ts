@@ -27,6 +27,12 @@ const CODEX_KEY = 'sk-codex-SECRET-xyz987';
 const GITHUB_TOKEN = 'ghu_SECRET_github_token_42';
 const SECRETS = [OPENCODE_KEY, CLAUDE_TOKEN, CODEX_KEY, GITHUB_TOKEN];
 
+const serviceHeader = (subject: string) =>
+  mockCredentials.service.header({
+    onBehalfOf: mockCredentials.service(subject),
+    targetPluginId: 'cloud-agents',
+  });
+
 function twoQuestionStream(): string[] {
   return recordedStream('opencode-needs-input')
     .flatMap(line => {
@@ -191,6 +197,38 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
       cleared.opencode.set,
       cleared.github.connected,
     ]).toEqual([false, false, false, false]);
+  });
+
+  it('gives the Anthropic API key to the assistant plugin only, and refuses a Claude Code token', async () => {
+    const apiKey = 'sk-ant-api03-SECRET-assistant';
+    const forAssistant = serviceHeader('plugin:assistant');
+    const readKey = (auth: string, userEntityRef = 'user:default/alice') =>
+      api('POST', '/service/anthropic-key', { userEntityRef }, auth);
+
+    expect((await readKey(forAssistant)).body).toEqual({ apiKey: null });
+    expect(
+      (await api('PUT', '/me/credentials/anthropic', { value: CLAUDE_TOKEN }))
+        .status,
+    ).toBe(400);
+    const put = await api('PUT', '/me/credentials/anthropic', {
+      value: apiKey,
+    });
+    expect(put.status).toBe(200);
+    expect((put.body as CredentialsSummary).anthropic.set).toBe(true);
+    expect(JSON.stringify(put.body)).not.toContain(apiKey);
+    expect(JSON.stringify(await knex('credentials').select())).not.toContain(
+      apiKey,
+    );
+
+    expect((await readKey(forAssistant)).body).toEqual({ apiKey });
+    expect((await readKey(forAssistant, 'user:default/bob')).body).toEqual({
+      apiKey: null,
+    });
+    expect((await readKey(ALICE)).status).toBe(403);
+    expect((await readKey(serviceHeader('plugin:catalog'))).status).toBe(403);
+
+    await api('DELETE', '/me/credentials/anthropic');
+    expect((await readKey(forAssistant)).body).toEqual({ apiKey: null });
   });
 
   it('rejects a codex credential without kind and a GitHub token GitHub does not accept', async () => {

@@ -1,0 +1,261 @@
+.root {
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  height: 100dvh;
+  background: var(--as-bg);
+  overflow: hidden;
+}
+
+/* Conversation list. */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--as-3);
+  min-height: 0;
+  padding: var(--as-4) var(--as-3);
+  border-right: 1px solid var(--as-line1);
+  background: var(--as-s1);
+}
+
+.sideHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--as-2);
+  padding: 0 var(--as-1);
+}
+.sideHead h1 {
+  margin: 0;
+  font-size: var(--bui-font-size-4);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sideNote {
+  margin: 0;
+  padding: 0 var(--as-1);
+  color: var(--as-fg2);
+  font-size: var(--bui-font-size-2);
+}
+
+.sideList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.convo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--as-2) var(--as-3);
+  border-radius: var(--as-r-md);
+  color: var(--as-fg1);
+  text-decoration: none;
+  transition: background-color var(--as-fast);
+}
+.convo:hover {
+  background: var(--as-s2);
+}
+.convo[aria-current='page'] {
+  background: var(--as-s3);
+}
+.convoTitle {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.convoTime {
+  color: var(--as-fg2);
+  font-size: var(--bui-font-size-2);
+}
+
+/* The open conversation: a scrolling transcript over a docked composer. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.scroller {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--as-8) var(--as-6) var(--as-4);
+}
+
+.column {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.dock {
+  padding: var(--as-2) var(--as-6) var(--as-4);
+  background: linear-gradient(transparent, var(--as-bg) var(--as-4));
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--as-2);
+  padding: var(--as-2);
+  border-radius: var(--as-r-xl);
+  background: var(--as-s1);
+  box-shadow: inset 0 0 0 1px var(--as-line2);
+  transition: box-shadow var(--as-fast);
+}
+.composer:focus-within {
+  box-shadow: inset 0 0 0 1px var(--as-ring),
+    0 0 0 3px color-mix(in srgb, var(--as-ring) 18%, transparent);
+}
+
+.field {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: var(--as-2);
+  border: 0;
+  outline: none;
+  resize: none;
+  background: none;
+  color: var(--as-fg1);
+  font: inherit;
+  line-height: 1.5;
+}
+.field::placeholder {
+  color: var(--as-fg2);
+}
+.field:disabled {
+  cursor: progress;
+}
+.composer .field:focus-visible {
+  outline: none;
+}
+
+.turnError {
+  display: flex;
+  align-items: center;
+  gap: var(--as-2);
+  margin: 0 0 var(--as-2);
+  padding: var(--as-2) var(--as-3);
+  border-radius: var(--as-r-md);
+  background: var(--as-danger-soft);
+  color: var(--as-danger);
+  font-size: var(--bui-font-size-2);
+}
+
+/* Empty state. */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--as-3);
+  padding-top: 12vh;
+  text-align: center;
+}
+.hero h2 {
+  margin: 0;
+  font-size: var(--bui-font-size-5);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.hero p {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--as-fg2);
+}
+.heroGlyph {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--as-r-lg);
+  background: var(--as-s2);
+  color: var(--as-fg1);
+}
+.heroGlyph svg {
+  width: 22px;
+  height: 22px;
+}
+
+.examples {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--as-2);
+  width: 100%;
+  margin-top: var(--as-4);
+}
+
+.example {
+  padding: var(--as-3) var(--as-4);
+  border: 0;
+  border-radius: var(--as-r-lg);
+  background: var(--as-s1);
+  box-shadow: inset 0 0 0 1px var(--as-line1);
+  color: var(--as-fg1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--as-fast), box-shadow var(--as-fast),
+    transform 90ms;
+}
+.example:hover {
+  background: var(--as-s2);
+  box-shadow: inset 0 0 0 1px var(--as-line2);
+}
+.example:active {
+  transform: scale(0.98);
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--as-3);
+  padding-top: 16vh;
+  text-align: center;
+  color: var(--as-fg2);
+}
+.center h2 {
+  margin: 0;
+  color: var(--as-fg1);
+  font-size: var(--bui-font-size-4);
+  font-weight: 600;
+}
+.center p {
+  margin: 0;
+}
+.heroIcon {
+  width: 28px;
+  height: 28px;
+  color: var(--as-danger);
+}
+
+@media (max-width: 720px) {
+  .root {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .side {
+    max-height: 30vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--as-line1);
+  }
+  .scroller {
+    padding: var(--as-4);
+  }
+  .dock {
+    padding: var(--as-2) var(--as-4) var(--as-4);
+  }
+  .examples {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

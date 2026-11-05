@@ -3,18 +3,18 @@ import {
   type DiscoveryApi,
   type FetchApi,
 } from '@backstage/frontend-plugin-api';
-import type {
-  AccessToken,
-  Agent,
-  AgentEventEnvelope,
-  AgentStatus,
-  CreateAgentRequest,
-  CreatedAccessToken,
-  CredentialName,
-  CredentialsSummary,
-  PutCredentialRequest,
+import {
+  type AccessToken,
+  type Agent,
+  type AgentEventEnvelope,
+  type AgentStatus,
+  type CreateAgentRequest,
+  type CreatedAccessToken,
+  type CredentialName,
+  type CredentialsSummary,
+  type PutCredentialRequest,
+  readSse,
 } from '@alaborderie/plugin-cloud-agents-common';
-import { readSse } from './sse';
 
 /** A non-2xx answer of the cloud-agents API, with its JSON body when it has one. */
 export class CloudAgentsApiError extends Error {

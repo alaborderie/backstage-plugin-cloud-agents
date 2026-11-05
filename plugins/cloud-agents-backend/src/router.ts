@@ -8,6 +8,7 @@ import type {
 import {
   AuthenticationError,
   InputError,
+  NotAllowedError,
   NotFoundError,
 } from '@backstage/errors';
 import {
@@ -68,7 +69,17 @@ const credentialBody = z.object({
   kind: z.enum(['api_key', 'auth_json']).optional(),
 });
 const tokenBody = z.object({ name: nonEmpty.max(200) });
-const credentialName = z.enum(['claude', 'codex', 'opencode', 'github']);
+const credentialName = z.enum([
+  'claude',
+  'codex',
+  'opencode',
+  'github',
+  'anthropic',
+]);
+const anthropicKeyBody = z.object({ userEntityRef: nonEmpty });
+
+/** The only caller of `POST /service/anthropic-key`. */
+const ASSISTANT_SUBJECT = 'plugin:assistant';
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -302,6 +313,8 @@ export function createRouter(deps: RouterDeps): express.Router {
     const body = parse(credentialBody, req.body);
     if (name === 'github') {
       await credentials.putGithubToken(owner, body.value);
+    } else if (name === 'anthropic') {
+      await credentials.putAnthropicKey(owner, body.value);
     } else {
       if (body.kind && name !== 'codex') {
         throw new InputError('kind is only for codex');
@@ -315,6 +328,15 @@ export function createRouter(deps: RouterDeps): express.Router {
     const owner = await ownerOf(req);
     await credentials.delete(owner, parse(credentialName, req.params.name));
     res.json(await credentials.summary(owner));
+  });
+
+  router.post('/service/anthropic-key', async (req, res) => {
+    const creds = await httpAuth.credentials(req, { allow: ['service'] });
+    if (creds.principal.subject !== ASSISTANT_SUBJECT) {
+      throw new NotAllowedError('Only the assistant plugin reads this key');
+    }
+    const { userEntityRef } = parse(anthropicKeyBody, req.body);
+    res.json({ apiKey: await credentials.anthropicKey(userEntityRef) });
   });
 
   router.get('/me/github/connect', async (req, res) => {

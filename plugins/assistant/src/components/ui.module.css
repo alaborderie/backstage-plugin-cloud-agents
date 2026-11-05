@@ -1,0 +1,175 @@
+/* Every color resolves to a BUI variable, so the page follows the light and dark themes. */
+.scope {
+  --as-bg: var(--bui-bg-app);
+  --as-s1: var(--bui-bg-neutral-1);
+  --as-s2: var(--bui-bg-neutral-2);
+  --as-s3: var(--bui-bg-neutral-3);
+  --as-fg1: var(--bui-fg-primary);
+  --as-fg2: var(--bui-fg-secondary);
+  --as-line1: var(--bui-border-1);
+  --as-line2: var(--bui-border-2);
+  --as-ring: var(--bui-ring);
+  --as-attn: var(--bui-announcement-bg);
+  --as-on-attn: var(--bui-announcement-fg);
+  --as-attn-fg: var(--bui-fg-announcement);
+  --as-attn-soft: var(--bui-announcement-bg-subdued);
+  --as-ok: var(--bui-fg-positive);
+  --as-ok-soft: var(--bui-positive-bg-subdued);
+  --as-danger: var(--bui-fg-negative);
+  --as-danger-soft: var(--bui-negative-bg-subdued);
+  --as-mono: var(--bui-font-monospace);
+  --as-r-sm: var(--bui-radius-2);
+  --as-r-md: var(--bui-radius-3);
+  --as-r-lg: var(--bui-radius-4);
+  --as-r-xl: var(--bui-radius-5);
+  --as-1: var(--bui-space-1);
+  --as-2: var(--bui-space-2);
+  --as-3: var(--bui-space-3);
+  --as-4: var(--bui-space-4);
+  --as-6: var(--bui-space-6);
+  --as-8: var(--bui-space-8);
+  --as-fast: 160ms;
+  --as-base: 240ms;
+  --as-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  color: var(--as-fg1);
+  font-family: var(--bui-font-regular);
+  font-size: var(--bui-font-size-3);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.scope :focus-visible {
+  outline: 2px solid var(--as-ring);
+  outline-offset: 2px;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.iconXs {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 var(--as-2);
+  border-radius: var(--bui-radius-full);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color var(--as-base), color var(--as-base);
+}
+.pill[data-status='running'],
+.pill[data-status='waiting'] {
+  color: var(--as-fg1);
+  background: var(--as-s3);
+}
+.pill[data-status='needs_input'] {
+  color: var(--as-on-attn);
+  background: var(--as-attn);
+}
+.pill[data-status='queued'] {
+  color: var(--as-fg2);
+  box-shadow: inset 0 0 0 1px var(--as-line2);
+}
+.pill[data-status='succeeded'] {
+  color: var(--as-ok);
+  background: var(--as-ok-soft);
+}
+.pill[data-status='failed'] {
+  color: var(--as-danger);
+  background: var(--as-danger-soft);
+}
+.pill[data-status='stopped'] {
+  color: var(--as-fg2);
+  background: var(--as-s2);
+}
+
+.liveDot {
+  position: relative;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.liveDot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ping 1.8s var(--as-ease-out) infinite;
+}
+@keyframes ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  80%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+  flex: none;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.prLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--as-1);
+  padding: 2px var(--as-2);
+  border-radius: var(--bui-radius-full);
+  background: var(--as-s2);
+  color: var(--as-fg2);
+  font-size: var(--bui-font-size-2);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color var(--as-fast), background-color var(--as-fast);
+}
+.prLink:hover {
+  color: var(--as-fg1);
+  background: var(--as-s3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scope *,
+  .scope *::before,
+  .scope *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .liveDot::after {
+    display: none;
+  }
+  .spinner {
+    border-right-color: currentColor;
+    opacity: 0.6;
+  }
+}

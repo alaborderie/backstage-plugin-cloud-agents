@@ -4,7 +4,7 @@ A Backstage plugin that runs coding agents (Claude Code, Codex, or OpenCode) as 
 
 The repository holds two products:
 
-- `plugins/`: three npm packages that any Backstage on the new backend system can add.
+- `plugins/`: the npm packages of two plugins, cloud agents and the assistant, that any Backstage on the new backend system can add.
 - `runner/`: the `ghcr.io/alaborderie/cloud-agent-runner` image and its event format ([runner/EVENTS.md](runner/EVENTS.md)). It has its own README and CI.
 
 | Package                                    | Directory                      | What it is                                                                                                                                                                                            |
@@ -12,8 +12,17 @@ The repository holds two products:
 | `@alaborderie/plugin-cloud-agents-backend` | `plugins/cloud-agents-backend` | The backend plugin: the API at `/api/cloud-agents`, the database tables, the Job launcher, and the log follower.                                                                                      |
 | `@alaborderie/plugin-cloud-agents`         | `plugins/cloud-agents`         | The frontend plugin, built on Backstage UI: the agents list, an agent's live timeline and questions, the new agent form, the settings page for credentials and access tokens, and a home page widget. |
 | `@alaborderie/plugin-cloud-agents-common`  | `plugins/cloud-agents-common`  | TypeScript types of the API and of the runner events.                                                                                                                                                 |
+| `@alaborderie/plugin-assistant-backend`    | `plugins/assistant-backend`    | The assistant's backend: conversations at `/api/assistant`, each turn streamed from a fast chat model with tools over the catalog, TechDocs, GitHub, and the cloud-agents actions.                    |
+| `@alaborderie/plugin-assistant`            | `plugins/assistant`            | The assistant's page at `/assistant`: the conversations, the streamed answers, and a live card for each agent the chat launches, then its summary.                                                    |
+| `@alaborderie/plugin-assistant-common`     | `plugins/assistant-common`     | TypeScript types of the assistant API.                                                                                                                                                                |
 
-[docs/API.md](docs/API.md) is the API contract, version 1.
+[docs/API.md](docs/API.md) is the API contract, version 1. [docs/ASSISTANT.md](docs/ASSISTANT.md) describes the assistant.
+
+## The assistant
+
+The assistant is a chat at `/assistant`. Each turn streams from a fast model without reasoning, DeepSeek V4.1 Flash through OpenCode Go by default, with one key for the whole Backstage. The model answers catalog questions from a catalog index in its prompt, and calls tools for the rest: catalog search, TechDocs, read-only GitHub, and the state of the user's cloud agents. For a hard question it calls Claude Opus 5.5 with the user's own Anthropic API key, which the user stores in Cloud agents settings. For work in a repository it starts a cloud agent or a hub through the `cloud-agents:*` actions, as the user. The page follows the agent live in a card, and when the agent finishes, writes its summary into the conversation. Conversations are stored per user.
+
+To add it, add `@alaborderie/plugin-assistant-backend` to the backend and `@alaborderie/plugin-assistant` to the app as for cloud agents, keep `backend.actions.pluginSources: [cloud-agents]`, and set `ASSISTANT_OPENCODE_GO_API_KEY` (or `assistant.chatModel.apiKey`). [docs/ASSISTANT.md](docs/ASSISTANT.md) has the configuration.
 
 ## How a run works
 
