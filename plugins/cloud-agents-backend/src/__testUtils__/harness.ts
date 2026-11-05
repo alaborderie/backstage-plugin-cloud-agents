@@ -10,13 +10,21 @@ import {
   type LoggerService,
   type RootLoggerService,
 } from '@backstage/backend-plugin-api';
+import { actionsRegistryServiceFactory } from '@backstage/backend-defaults/alpha';
 import {
+  mockCredentials,
   mockServices,
   startTestBackend,
   type TestBackend,
 } from '@backstage/backend-test-utils';
+import { NotAllowedError } from '@backstage/errors';
 import type { FakeKube } from './fakeKube';
 import { cloudAgentsPlugin } from '../plugin';
+import {
+  HUB_RUN_SUBJECT_PREFIX,
+  hubRunTokenKey,
+  verifyHubRunToken,
+} from '../runTokens';
 
 /** Every log line the backend wrote, to check that no credential leaks. */
 export class CapturedLogs {
@@ -143,6 +151,36 @@ export async function startFakeGithub(): Promise<FakeGithub> {
 
 export const ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
 
+/**
+ * The mock HTTP auth, plus what `cloudAgentsHubRunTokens` and an
+ * `externalAccess` entry add in a real backend: a valid hub run token
+ * authenticates as the service principal `cloud-agents-hub-run:<run id>`.
+ */
+const hubRunTokenAuth = createServiceFactory({
+  service: coreServices.httpAuth,
+  deps: { plugin: coreServices.pluginMetadata },
+  factory: ({ plugin }) => {
+    const mock = mockServices.httpAuth({ pluginId: plugin.getId() });
+    const key = hubRunTokenKey(Buffer.from(ENCRYPTION_KEY, 'base64'));
+    return {
+      ...mock,
+      credentials: (async (req, options) => {
+        const token = /^Bearer\s+(\S+)$/i.exec(
+          req.headers.authorization ?? '',
+        )?.[1];
+        const runId = token ? verifyHubRunToken(key, token) : undefined;
+        if (!runId) return mock.credentials(req, options);
+        if (options?.allow && !options.allow.includes('service')) {
+          throw new NotAllowedError(
+            `This endpoint does not allow 'service' credentials`,
+          );
+        }
+        return mockCredentials.service(`${HUB_RUN_SUBJECT_PREFIX}${runId}`);
+      }) as typeof mock.credentials,
+    };
+  },
+});
+
 export async function startPluginBackend(options: {
   knex: Knex;
   kube: FakeKube;
@@ -151,6 +189,7 @@ export async function startPluginBackend(options: {
   logs: CapturedLogs;
   githubApp?: boolean;
   podStartTimeoutMs?: number;
+  hubWakeDelayMs?: number;
 }): Promise<{ backend: TestBackend; baseUrl: string }> {
   const dir = mkdtempSync(join(tmpdir(), 'cloud-agents-'));
   const kubeconfigPath = join(dir, 'kubeconfig');
@@ -163,6 +202,8 @@ export async function startPluginBackend(options: {
   const backend = await startTestBackend({
     features: [
       cloudAgentsPlugin,
+      actionsRegistryServiceFactory,
+      hubRunTokenAuth,
       mockServices.database.factory({ knex: options.knex }),
       createServiceFactory({
         service: coreServices.rootLogger,
@@ -180,6 +221,7 @@ export async function startPluginBackend(options: {
             runnerBackendUrl: 'http://backstage.test',
             pollIntervalMs: 20,
             podStartTimeoutMs: options.podStartTimeoutMs ?? 120_000,
+            hubWakeDelayMs: options.hubWakeDelayMs ?? 300,
             github: {
               apiBaseUrl: options.githubUrl,
               ...(options.githubApp && {

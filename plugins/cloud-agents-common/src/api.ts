@@ -1,10 +1,14 @@
 import type { Harness, RunnerEvent, ToolKind } from './events';
 
-/** docs/API.md "Agents and runs". */
+/**
+ * docs/API.md "Agents and runs". Only a hub is ever `waiting`: it has no
+ * active run, no open question of its own, and a child that is not terminal.
+ */
 export type AgentStatus =
   | 'queued'
   | 'running'
   | 'needs_input'
+  | 'waiting'
   | 'succeeded'
   | 'failed'
   | 'stopped';
@@ -13,10 +17,16 @@ export const AGENT_STATUSES: readonly AgentStatus[] = [
   'queued',
   'running',
   'needs_input',
+  'waiting',
   'succeeded',
   'failed',
   'stopped',
 ];
+
+/** A task does the work; a hub splits its objective into child tasks. */
+export type AgentKind = 'task' | 'hub';
+
+export const AGENT_KINDS: readonly AgentKind[] = ['task', 'hub'];
 
 /** Statuses after which the event stream closes. `needs_input` is not one. */
 export const TERMINAL_AGENT_STATUSES: readonly AgentStatus[] = [
@@ -36,8 +46,11 @@ export type RunStatus =
   | 'needs_input'
   | 'stopped';
 
-/** Why a run started: the agent's creation, an answer, or a follow-up message. */
-export type RunReason = 'initial' | 'reply' | 'message';
+/**
+ * Why a run started: the agent's creation, an answer, a follow-up message, or
+ * (on a hub) an event of one of its children.
+ */
+export type RunReason = 'initial' | 'reply' | 'message' | 'child';
 
 export type Tier = string;
 
@@ -59,6 +72,8 @@ export interface CreateAgentRequest {
   model?: string;
   effort?: string;
   parent?: AgentParent;
+  /** Default `task`. A hub's `prompt` is its objective. */
+  kind?: AgentKind;
 }
 
 export interface AgentRun {
@@ -97,8 +112,21 @@ export type AgentActivity =
       ts: string;
     };
 
+/** One child of a hub, as the hub's agent object lists it. */
+export interface AgentChildSummary {
+  id: string;
+  title: string;
+  status: AgentStatus;
+  branch: string;
+  prUrl: string | null;
+  /** How many blocking questions of the child's last run have no answer. */
+  openQuestions: number;
+  updatedAt: string;
+}
+
 export interface Agent {
   id: string;
+  kind: AgentKind;
   title: string;
   repo: string;
   base: string;
@@ -112,7 +140,12 @@ export interface Agent {
   runs: AgentRun[];
   openQuestions: OpenQuestion[];
   prUrl: string | null;
+  /** The T3 origin of the agent. Unrelated to `parentId`. */
   parent: AgentParent | null;
+  /** The hub that created this agent, or null. */
+  parentId: string | null;
+  /** On a hub, its children, oldest first. `[]` on a task. */
+  children: AgentChildSummary[];
   /** The latest tool call or assistant message; null before the first. */
   activity: AgentActivity | null;
 }
@@ -128,7 +161,14 @@ export type PluginEvent =
     }
   | { type: 'agent.run_started'; runId: string; reason: RunReason; ts: string }
   /** The user's follow-up message, just before the run it starts. */
-  | { type: 'agent.message'; text: string; ts: string };
+  | { type: 'agent.message'; text: string; ts: string }
+  /** A child event a hub run carries, just before that run's `agent.run_started`. */
+  | {
+      type: 'agent.wake';
+      childId: string;
+      childStatus: AgentStatus;
+      ts: string;
+    };
 
 /** The `data` of one `agent-event` SSE message. */
 export interface AgentEventEnvelope {

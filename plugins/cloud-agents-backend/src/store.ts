@@ -1,8 +1,11 @@
 import type { Knex } from 'knex';
 import {
   summarizeToolInput,
+  isTerminalAgentStatus,
   type Agent,
   type AgentActivity,
+  type AgentChildSummary,
+  type AgentKind,
   type AgentParent,
   type AgentRun,
   type AgentStatus,
@@ -16,6 +19,13 @@ import {
 export interface AgentRow {
   id: string;
   owner_ref: string;
+  kind: AgentKind;
+  /** The hub that created this agent. */
+  parent_id: string | null;
+  /** A hub's plan between runs: the JSON its last `write_state` stored. */
+  hub_state: string | null;
+  /** The pending stop came from the agent's hub, so it must not wake the hub. */
+  stop_by_hub: boolean | number;
   title: string;
   repo: string;
   base: string;
@@ -69,6 +79,16 @@ export interface EventRow {
   type: string;
   runner_seq: number | null;
   data: string;
+}
+
+/** A child event queued for its hub. `run_id` is the hub run that carried it. */
+export interface WakeEventRow {
+  id?: number;
+  hub_id: string;
+  child_id: string;
+  child_status: AgentStatus;
+  created_at: string;
+  run_id: string | null;
 }
 
 export interface CredentialRow {
@@ -178,7 +198,7 @@ export class Store {
 
   async listAgentRows(
     owner: string,
-    status: AgentStatus | undefined,
+    filter: { status?: AgentStatus; parentId?: string; limit?: number },
   ): Promise<AgentRow[]> {
     const query = this.knex<AgentRow>('agents')
       .where({ owner_ref: owner })
@@ -186,8 +206,60 @@ export class Store {
         { column: 'created_at', order: 'desc' },
         { column: 'id', order: 'desc' },
       ]);
-    if (status) query.andWhere({ status });
+    if (filter.status) query.andWhere({ status: filter.status });
+    if (filter.parentId) query.andWhere({ parent_id: filter.parentId });
+    if (filter.limit) query.limit(filter.limit);
     return query;
+  }
+
+  /** A hub's children, oldest first. */
+  async listChildRows(db: Db, hubId: string): Promise<AgentRow[]> {
+    return db<AgentRow>('agents')
+      .where({ parent_id: hubId })
+      .orderBy([
+        { column: 'created_at', order: 'asc' },
+        { column: 'id', order: 'asc' },
+      ]);
+  }
+
+  async insertWakeEvent(db: Db, row: WakeEventRow): Promise<void> {
+    await db('wake_events').insert(row);
+  }
+
+  async listPendingWakes(db: Db, hubId: string): Promise<WakeEventRow[]> {
+    return db<WakeEventRow>('wake_events')
+      .where({ hub_id: hubId })
+      .whereNull('run_id')
+      .orderBy('id', 'asc');
+  }
+
+  async assignWakes(db: Db, ids: number[], runId: string): Promise<void> {
+    if (ids.length) {
+      await db('wake_events').whereIn('id', ids).update({ run_id: runId });
+    }
+  }
+
+  /** Hubs that sleep with child events still queued, as after a restart. */
+  async listWaitingHubsWithWakes(): Promise<string[]> {
+    const rows = await this.knex('agents')
+      .join('wake_events', 'wake_events.hub_id', 'agents.id')
+      .where({ 'agents.status': 'waiting' })
+      .whereNull('wake_events.run_id')
+      .distinct('agents.id');
+    return rows.map(row => String(row.id));
+  }
+
+  /** The last `assistant.message` text of the agent's last run. */
+  async lastAssistantMessage(
+    agentId: string,
+    runId: string,
+  ): Promise<string | null> {
+    const row = await this.knex<EventRow>('events')
+      .where({ agent_id: agentId, run_id: runId, type: 'assistant.message' })
+      .orderBy('seq', 'desc')
+      .first('data');
+    if (!row) return null;
+    return (JSON.parse(row.data) as { text: string }).text;
   }
 
   async insertRun(db: Db, row: RunRow): Promise<void> {
@@ -283,6 +355,36 @@ export class Store {
     return row ? toActivity(row) : null;
   }
 
+  /** The blocking questions of the agent's last run that have no answer. */
+  async openQuestions(db: Db, agentId: string): Promise<QuestionRow[]> {
+    const runs = await this.listRuns(db, agentId);
+    const lastRun = runs[runs.length - 1];
+    if (!lastRun) return [];
+    const questions = await this.listQuestions(db, lastRun.id);
+    return questions.filter(q => Boolean(q.blocking) && q.answer === null);
+  }
+
+  private async childSummaries(hubId: string): Promise<AgentChildSummary[]> {
+    const rows = await this.listChildRows(this.knex, hubId);
+    return Promise.all(
+      rows.map(async child => ({
+        id: child.id,
+        title: child.title,
+        status: child.status,
+        branch: child.branch,
+        prUrl: child.pr_url,
+        openQuestions: (await this.openQuestions(this.knex, child.id)).length,
+        updatedAt: child.updated_at,
+      })),
+    );
+  }
+
+  /** Whether any child of the hub can still change. */
+  async hasActiveChild(db: Db, hubId: string): Promise<boolean> {
+    const rows = await this.listChildRows(db, hubId);
+    return rows.some(child => !isTerminalAgentStatus(child.status));
+  }
+
   /** The agent object of docs/API.md, with its runs and open questions. */
   async toAgent(row: AgentRow): Promise<Agent> {
     const runs = await this.listRuns(this.knex, row.id);
@@ -293,6 +395,7 @@ export class Store {
     const activity = await this.lastActivity(row.id);
     return {
       id: row.id,
+      kind: row.kind,
       title: row.title,
       repo: row.repo,
       base: row.base,
@@ -309,6 +412,8 @@ export class Store {
         .map(toOpenQuestion),
       prUrl: row.pr_url,
       parent: row.parent ? (JSON.parse(row.parent) as AgentParent) : null,
+      parentId: row.parent_id,
+      children: row.kind === 'hub' ? await this.childSummaries(row.id) : [],
       activity,
     };
   }

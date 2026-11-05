@@ -45,6 +45,13 @@ export interface CloudAgentsConfig {
    * then uses the `GH_TOKEN` it started with.
    */
   runnerGithubTokenUrl: string | undefined;
+  /**
+   * The plugin's API as hub pods reach it, for the hub tools. `undefined`
+   * without `cloudAgents.runnerBackendUrl`, and then hubs cannot be created.
+   */
+  runnerApiUrl: string | undefined;
+  /** How long a child event waits for others before it wakes its hub. */
+  hubWakeDelayMs: number;
 }
 
 type Env = Record<string, string | undefined>;
@@ -207,5 +214,10 @@ export function readCloudAgentsConfig(
     runnerGithubTokenUrl: runnerBackendUrl
       ? `${runnerBackendUrl}/api/cloud-agents/runner/github-token`
       : undefined,
+    runnerApiUrl: runnerBackendUrl
+      ? `${runnerBackendUrl}/api/cloud-agents`
+      : undefined,
+    hubWakeDelayMs:
+      config.getOptionalNumber('cloudAgents.hubWakeDelayMs') ?? 5000,
   };
 }

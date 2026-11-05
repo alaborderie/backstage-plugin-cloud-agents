@@ -1,12 +1,13 @@
 import { createWriteStream, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openAskChannel } from './ask-channel.ts';
+import { openToolChannel } from './ask-channel.ts';
 import type { WriteStream } from 'node:fs';
 import { Emitter, EXIT_CODES, addUsage, emptyUsage } from './events.ts';
 import type { EventBody, HarnessName, RunStatus, Sink } from './events.ts';
 import { harnesses } from './harnesses/index.ts';
-import { questionEvents } from './harnesses/types.ts';
+import { ASK_TOOL, NO_REPLY, questionEvents } from './harnesses/types.ts';
+import { callHubTool, hubContext, isHubTool } from './hub-tools.ts';
 import type { Harness, RunSpec } from './harnesses/types.ts';
 import { baseEnv, runProc } from './proc.ts';
 import { collectSecrets, redactString } from './redact.ts';
@@ -114,6 +115,7 @@ export async function run(opts: RunOptions, env: NodeJS.ProcessEnv, stdout: Sink
     harness_version: await harnessVersion(harness, plainEnv),
   });
 
+  const hub = hubContext(env, opts.repo, opts.base);
   let error: string | null;
   let harnessExit: number | null = null;
   try {
@@ -125,6 +127,7 @@ export async function run(opts: RunOptions, env: NodeJS.ProcessEnv, stdout: Sink
       workdir: opts.workdir,
       home: env.HOME ?? '/home/agent',
       askSocket: join(tmpdir(), `cloud-agent-ask-${String(process.pid)}.sock`),
+      hub: hub !== null,
     };
     const harnessEnv = { ...gitEnv, ...harness.prepare(spec, env) };
     await configureGit(gitEnv);
@@ -135,9 +138,13 @@ export async function run(opts: RunOptions, env: NodeJS.ProcessEnv, stdout: Sink
     const ws = await prepareWorkspace(workspace);
     emitter.emit({ type: 'workspace.ready', repo: opts.repo, branch: opts.branch, base: opts.base, ...ws });
     let asked = 0;
-    const channel = await openAskChannel(spec.askSocket, (input) => {
-      for (const body of questionEvents(`ask-${String(++asked)}`, input, 'ask_user')) emitter.emit(body);
-      return { answer: null };
+    const channel = await openToolChannel(spec.askSocket, async ({ tool, input }) => {
+      if (tool === ASK_TOOL) {
+        for (const body of questionEvents(`ask-${String(++asked)}`, input, 'ask_user')) emitter.emit(body);
+        return { text: NO_REPLY, isError: false };
+      }
+      if (hub && isHubTool(tool)) return callHubTool(hub, tool, input);
+      return { text: `unknown tool ${tool}`, isError: true };
     });
     const outcome = await runHarness(harness, spec, harnessEnv, emitter, raw, secrets, stderr, signal).finally(() => channel.close());
     harnessExit = outcome.code;

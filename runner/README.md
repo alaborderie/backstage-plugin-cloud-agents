@@ -48,7 +48,8 @@ Each credential arrives as an environment variable from the agent's Kubernetes S
 | --- | --- | --- |
 | `GH_TOKEN` | git, `gh`, the skills install, and the agent | Required. It must read the private `alaborderie/claude-plugins` and push to `--repo`. git gets it from `cloud-agent git-credential`, its credential helper for github.com, so the token never appears in a remote URL. |
 | `CLOUD_AGENT_GH_TOKEN_URL` | git and `gh` | Optional, set by the Backstage plugin. Where the run's current GitHub token is. When it and `CLOUD_AGENT_RUN_TOKEN` are set, the credential helper and the `gh` in the image ask this URL each time, so a run keeps working after the plugin refreshes the token. If the URL does not answer, they use `GH_TOKEN`. |
-| `CLOUD_AGENT_RUN_TOKEN` | git and `gh` | Optional. The bearer token for `CLOUD_AGENT_GH_TOKEN_URL`, valid while the run is active. |
+| `CLOUD_AGENT_RUN_TOKEN` | git, `gh`, and the hub tools | Optional. The bearer token for `CLOUD_AGENT_GH_TOKEN_URL`, valid while the run is active. On a hub run it also authenticates the hub tools. |
+| `CLOUD_AGENT_KIND` and `CLOUD_AGENT_API_URL` | the `cloud_agent` MCP server | Set by the plugin on a hub run only: `hub`, and the plugin's API as the pod reaches it. The `cloud_agent` server then offers the hub tools next to `ask_user` (see [EVENTS.md](EVENTS.md#hub-tools)). |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `--harness claude` | The token from `claude setup-token`. Only the official Claude Code CLI receives it. |
 | `CODEX_API_KEY` or `OPENAI_API_KEY` | `--harness codex` | An OpenAI API key. Preferred for unattended pods. |
 | `CODEX_AUTH_JSON` | `--harness codex` | The path of a ChatGPT `auth.json`, mounted from a Secret. The runner copies it to `~/.codex/auth.json`. Give the mount a mode the container user (uid 10001) can read, such as `defaultMode: 0444`. |

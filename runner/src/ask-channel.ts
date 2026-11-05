@@ -2,15 +2,21 @@ import { rmSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
 
 /**
- * The runner listens on a Unix socket; each `cloud-agent mcp-ask` process sends one JSON line per ask_user call
- * and waits for one reply line. Version 1 replies at once with no answer. A later version can hold the reply
- * until an operator answers, which makes ask_user block without changing the MCP side.
+ * The runner listens on a Unix socket; each `cloud-agent mcp-ask` process sends one JSON line per tool call
+ * and waits for one reply line. The runner answers `ask_user` at once with no answer, and calls the plugin
+ * for the hub tools, so the run's token never reaches the harness.
  */
-export interface AskReply {
-  answer: string | null;
+export interface ToolCall {
+  tool: string;
+  input: unknown;
 }
 
-export async function openAskChannel(path: string, onQuestion: (input: unknown) => AskReply): Promise<{ close(): Promise<void> }> {
+export interface ToolReply {
+  text: string;
+  isError: boolean;
+}
+
+export async function openToolChannel(path: string, onCall: (call: ToolCall) => Promise<ToolReply>): Promise<{ close(): Promise<void> }> {
   rmSync(path, { force: true });
   const server = createServer((socket) => {
     let buffer = '';
@@ -19,13 +25,15 @@ export async function openAskChannel(path: string, onQuestion: (input: unknown) 
       for (let end = buffer.indexOf('\n'); end !== -1; end = buffer.indexOf('\n')) {
         const line = buffer.slice(0, end);
         buffer = buffer.slice(end + 1);
-        let input: unknown;
+        let call: ToolCall;
         try {
-          input = JSON.parse(line);
+          call = JSON.parse(line) as ToolCall;
         } catch {
           continue;
         }
-        socket.write(`${JSON.stringify(onQuestion(input))}\n`);
+        void onCall(call)
+          .catch((e: unknown) => ({ text: e instanceof Error ? e.message : String(e), isError: true }))
+          .then((reply) => socket.write(`${JSON.stringify(reply)}\n`));
       }
     });
     socket.on('error', () => undefined);
@@ -42,14 +50,14 @@ export async function openAskChannel(path: string, onQuestion: (input: unknown) 
   };
 }
 
-export function sendQuestion(path: string, input: unknown, timeoutMs = 10_000): Promise<AskReply | null> {
+export function callTool(path: string, call: ToolCall, timeoutMs: number): Promise<ToolReply | null> {
   return new Promise((resolve) => {
     const socket = createConnection(path);
     const timer = setTimeout(() => {
       socket.destroy();
       resolve(null);
     }, timeoutMs);
-    const done = (reply: AskReply | null): void => {
+    const done = (reply: ToolReply | null): void => {
       clearTimeout(timer);
       socket.destroy();
       resolve(reply);
@@ -57,14 +65,14 @@ export function sendQuestion(path: string, input: unknown, timeoutMs = 10_000): 
     socket.on('error', () => {
       done(null);
     });
-    socket.on('connect', () => socket.write(`${JSON.stringify(input)}\n`));
+    socket.on('connect', () => socket.write(`${JSON.stringify(call)}\n`));
     let buffer = '';
     socket.on('data', (chunk: Buffer) => {
       buffer += chunk.toString();
       const end = buffer.indexOf('\n');
       if (end === -1) return;
       try {
-        done(JSON.parse(buffer.slice(0, end)) as AskReply);
+        done(JSON.parse(buffer.slice(0, end)) as ToolReply);
       } catch {
         done(null);
       }
