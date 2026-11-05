@@ -89,12 +89,16 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
     );
   }
 
-  function runSecret(runId: string): Record<string, string> {
-    const job = [...kube.jobs.values()].find(
-      j => j.metadata?.labels?.['cloud-agents/run-id'] === runId,
-    );
-    return kube.secrets.get(job!.metadata!.name!)!.stringData!;
+  /** The run's Secret, which the plugin creates just after the run's row. */
+  function runSecret(runId: string): Promise<Record<string, string>> {
+    return waitFor(async () => {
+      const job = [...kube.jobs.values()].find(
+        j => j.metadata?.labels?.['cloud-agents/run-id'] === runId,
+      );
+      return job && kube.secrets.get(job.metadata!.name!)?.stringData;
+    });
   }
+
 
   function agentWhen(
     id: string,
@@ -119,7 +123,7 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
     expect(status).toBe(201);
     return {
       hub,
-      token: runSecret(hub.runs[0].id).CLOUD_AGENT_RUN_TOKEN!,
+      token: (await runSecret(hub.runs[0].id)).CLOUD_AGENT_RUN_TOKEN!,
     };
   }
 
@@ -142,6 +146,7 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
       kubeUrl,
       githubUrl: github.url,
       logs: new CapturedLogs(),
+      hubWakeDelayMs: 2000,
     }));
   });
 
@@ -217,7 +222,7 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
     const second = await agentWhen(hub.id, x => x.runs.length === 2);
     expect(second.status).not.toBe('waiting');
     const run2 = second.runs[1]!.id;
-    expect(runSecret(run2)['prompt.md']).toBe(
+    expect((await runSecret(run2))['prompt.md']).toBe(
       [
         'Use the backstage-hub skill.',
         '',
@@ -231,7 +236,7 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
       ].join('\n'),
     );
     expect((await action('list-agents', {}, token1)).status).toBe(403);
-    const token2 = runSecret(run2).CLOUD_AGENT_RUN_TOKEN!;
+    const token2 = (await runSecret(run2)).CLOUD_AGENT_RUN_TOKEN!;
     expect(
       (await call('GET', '/runner/hub/state', undefined, `Bearer ${token2}`))
         .body,
@@ -266,7 +271,7 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
     const third = await agentWhen(hub.id, x => x.runs.length === 3);
     await new Promise(r => setTimeout(r, 600));
     expect((await agentWhen(hub.id, () => true)).runs).toHaveLength(3);
-    expect(runSecret(third.runs[2]!.id)['prompt.md']).toContain(
+    expect((await runSecret(third.runs[2]!.id))['prompt.md']).toContain(
       `- child ${
         b!.id
       } "Add b" is succeeded (branch cloud-agent/child-b, PR https://github.com/acme/app/pull/2)`,
@@ -327,7 +332,7 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
       prompt: 'Unrelated',
       tier: 'flash',
     });
-    const taskToken = runSecret(other.runs[0].id).CLOUD_AGENT_RUN_TOKEN!;
+    const taskToken = (await runSecret(other.runs[0].id)).CLOUD_AGENT_RUN_TOKEN!;
 
     for (const [name, input] of [
       ['get-agent', { id: other.id }],
@@ -413,10 +418,10 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
     ).toBe(202);
     const second = await agentWhen(hub.id, x => x.runs.length === 2);
     const run2 = second.runs[1]!.id;
-    expect(runSecret(run2)['prompt.md']).toBe(
+    expect((await runSecret(run2))['prompt.md']).toBe(
       'Use the backstage-hub skill.\n\nObjective:\nShip a and b\n\nMessages from the user:\n- Also do d',
     );
-    const token2 = runSecret(run2).CLOUD_AGENT_RUN_TOKEN!;
+    const token2 = (await runSecret(run2)).CLOUD_AGENT_RUN_TOKEN!;
     const stopped = await action(
       'stop-agent',
       { id: c.output.agent.id },
