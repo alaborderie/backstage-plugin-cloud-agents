@@ -544,7 +544,10 @@ export class AgentService {
     } else {
       await this.store.insertAgent(this.store.knex, row);
     }
-    await this.startRun(row.id, 'initial', credentials, async () => ({}));
+    // A stopping hub can stop its new child before the child's first run.
+    await this.startRun(row.id, 'initial', credentials, async m =>
+      m.agent.status === 'queued' && !m.agent.stop_requested ? {} : false,
+    );
     return this.getAgent(owner, id);
   }
 
@@ -688,6 +691,10 @@ export class AgentService {
         error: message,
       });
       return;
+    }
+    // A stop between the run's record and its Job found no Job to delete.
+    if (await this.isStopRequested(agentId)) {
+      await this.cluster.deleteJob(run.job_name).catch(() => {});
     }
     this.onRunStarted(run);
   }
@@ -962,7 +969,6 @@ export class AgentService {
       });
     }
   }
-
 
   /**
    * Sends the stored events after `after`, then live ones, in seq order. Ends

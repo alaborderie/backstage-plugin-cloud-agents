@@ -171,18 +171,19 @@ describe.each(databases.eachSupportedId())('hubs on %s', databaseId => {
     expect(hub).toMatchObject({ kind: 'hub', parentId: null, children: [] });
     expect(token1.startsWith('cahub.')).toBe(true);
 
-    const created = await Promise.all(
-      [
-        { title: 'Add a', branch: childA },
-        { title: 'Add b', branch: 'cloud-agent/child-b' },
-      ].map(child =>
-        action(
+    const created = [];
+    for (const child of [
+      { title: 'Add a', branch: childA },
+      { title: 'Add b', branch: 'cloud-agent/child-b' },
+    ]) {
+      created.push(
+        await action(
           'create-agent',
           { repo: REPO, prompt: child.title, tier: 'flash', ...child },
           token1,
         ),
-      ),
-    );
+      );
+    }
     expect(created.map(c => c.status)).toEqual([200, 200]);
     const [a, b] = created.map(c => c.body.output.agent as Agent);
     expect(a).toMatchObject({ kind: 'task', parentId: hub.id });

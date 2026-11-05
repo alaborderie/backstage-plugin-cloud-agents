@@ -126,6 +126,38 @@ describe('agents list', () => {
     expect(screen.queryByRole('group')).not.toBeInTheDocument();
   });
 
+  it('keeps the children of a hub that asks a question nested under it', async () => {
+    const asking = {
+      ...hub,
+      status: 'needs_input' as const,
+      openQuestions: [
+        {
+          questionId: 'ask-1',
+          runId: 'run-10',
+          question: 'Split the endpoint?',
+          options: ['Yes', 'No'],
+        },
+      ],
+    };
+    await renderRoot(
+      mockApi({
+        listAgents: jest.fn(async () => [asking, childAsking, childDone]),
+      }),
+      '/cloud-agents',
+    );
+    await screen.findAllByRole('link', { name: hub.title });
+    expect(titles('Needs you')).toEqual([hub.title, childAsking.title]);
+    const children = within(region('In progress')).getByRole('group', {
+      name: `Children of ${hub.title}`,
+    });
+    expect(
+      within(children)
+        .getAllByRole('link')
+        .map(link => link.textContent)
+        .filter(text => hubFamily.some(a => a.title === text)),
+    ).toEqual([childDone.title, childAsking.title]);
+  });
+
   it('narrows the list by search and status, and clears the filters', async () => {
     await renderRoot(mockApi(), '/cloud-agents');
     await screen.findByRole('link', { name: succeeded.title });

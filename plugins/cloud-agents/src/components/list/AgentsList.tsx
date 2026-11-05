@@ -231,15 +231,17 @@ export function AgentsList() {
   const active = FILTERS.find(f => f.id === filter) ?? FILTERS[0]!;
   const shown = all.filter(a => active.test(a) && matches(a, query));
   const needs = shown.filter(a => a.status === 'needs_input');
-  const listed = shown.filter(a => a.status !== 'needs_input');
-  // Children nest under a hub that has a row. A hub asking a question has a
-  // card instead, and a hub the filters hide has nothing, so its children
-  // stay at the top level.
+  // A hub asking a question keeps its row too, so its children stay nested.
+  const listed = shown.filter(
+    a => a.status !== 'needs_input' || a.kind === 'hub',
+  );
+  // Children nest under a hub that has a row. A hub the filters hide has
+  // none, so its children stay at the top level.
   const hubs = new Set(listed.filter(a => a.kind === 'hub').map(a => a.id));
   const nested = (a: Agent) => a.parentId !== null && hubs.has(a.parentId);
   const top = listed.filter(a => !nested(a));
-  const inProgress = top.filter(isActive);
-  const done = top.filter(a => !isActive(a));
+  const inProgress = top.filter(a => isActive(a) || a.status === 'needs_input');
+  const done = top.filter(a => !isActive(a) && a.status !== 'needs_input');
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

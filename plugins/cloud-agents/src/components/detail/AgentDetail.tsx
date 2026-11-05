@@ -555,7 +555,7 @@ export function AgentDetail() {
   const base = useBasePath();
   const agent = useAgent(id);
 
-  if (!agent.value && agent.error) {
+  if (agent.error && agent.value?.id !== id) {
     const notFound =
       agent.error instanceof CloudAgentsApiError && agent.error.status === 404;
     return (
