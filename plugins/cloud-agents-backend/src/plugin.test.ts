@@ -750,6 +750,101 @@ describe.each(databases.eachSupportedId())('cloud-agents on %s', databaseId => {
     expect(done.runs).toHaveLength(2);
   });
 
+  it('lists each agent with its latest tool call or assistant message as activity', async () => {
+    await setCredentials();
+    const lines = recordedStream('opencode');
+    const scripts = [
+      { lines: lines.slice(0, 9), exitCode: 0, holdAt: 9 },
+      { lines, exitCode: 0 },
+    ];
+    kube.script = () => scripts.shift()!;
+    const running = (
+      await api('POST', '/agents', {
+        repo: 'acme/app',
+        prompt: 'p',
+        tier: 'flash',
+      })
+    ).body as Agent;
+    expect(running.activity).toBeNull();
+    const done = (
+      await api('POST', '/agents', {
+        repo: 'acme/app',
+        prompt: 'q',
+        tier: 'flash',
+      })
+    ).body as Agent;
+    await agentWhen(done.id, a => a.status === 'succeeded');
+
+    const byId = await waitFor(async () => {
+      const { body } = await api('GET', '/agents');
+      const items = new Map((body as Agent[]).map(a => [a.id, a]));
+      return items.get(running.id)?.activity && items.get(done.id)?.activity
+        ? items
+        : undefined;
+    });
+    expect(byId.get(running.id)!.activity).toEqual({
+      type: 'tool.call',
+      name: 'shell',
+      kind: 'shell',
+      summary: expect.stringMatching(/^git status --short; /),
+      ts: JSON.parse(lines[7]!).ts,
+    });
+    expect(byId.get(done.id)!.activity).toEqual({
+      type: 'assistant.message',
+      text: 'https://github.com/alaborderie/cloud-agent-runner-sandbox/pull/3',
+      ts: JSON.parse(lines[26]!).ts,
+    });
+    const filtered = (await api('GET', '/agents?status=running'))
+      .body as Agent[];
+    expect(filtered.find(a => a.id === running.id)?.activity?.type).toBe(
+      'tool.call',
+    );
+  });
+
+  it('streams a follow-up as agent.message before the run it starts', async () => {
+    await setCredentials();
+    const agent = (
+      await api('POST', '/agents', {
+        repo: 'acme/app',
+        prompt: 'p',
+        tier: 'flash',
+      })
+    ).body as Agent;
+    await agentWhen(agent.id, a => a.status === 'succeeded');
+    expect(
+      (
+        await api('POST', `/agents/${agent.id}/messages`, {
+          text: 'Also add a README',
+        })
+      ).status,
+    ).toBe(202);
+    const done = await agentWhen(
+      agent.id,
+      a => a.status === 'succeeded' && a.runs.length === 2,
+    );
+
+    const { messages } = await readSse(`${baseUrl}/agents/${agent.id}/events`, {
+      Authorization: ALICE,
+    });
+    const at = messages.findIndex(m => m.data.event.type === 'agent.message');
+    expect(messages[at]!.data).toMatchObject({
+      runId: done.runs[1]!.id,
+      event: {
+        type: 'agent.message',
+        text: 'Also add a README',
+        ts: expect.any(String),
+      },
+    });
+    expect(messages[at + 1]!.data.event).toMatchObject({
+      type: 'agent.run_started',
+      reason: 'message',
+      runId: done.runs[1]!.id,
+    });
+    expect(
+      messages.filter(m => m.data.event.type === 'agent.message'),
+    ).toHaveLength(1);
+  });
+
   it('starts one follow-up run when two messages race', async () => {
     await setCredentials();
     const agent = (

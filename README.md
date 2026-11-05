@@ -7,11 +7,11 @@ The repository holds two products:
 - `plugins/`: three npm packages that any Backstage on the new backend system can add.
 - `runner/`: the `ghcr.io/alaborderie/cloud-agent-runner` image and its event format ([runner/EVENTS.md](runner/EVENTS.md)). It has its own README and CI.
 
-| Package                                    | Directory                      | What it is                                                                                                                                                 |
-| ------------------------------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@alaborderie/plugin-cloud-agents-backend` | `plugins/cloud-agents-backend` | The backend plugin: the API at `/api/cloud-agents`, the database tables, the Job launcher, and the log follower.                                           |
-| `@alaborderie/plugin-cloud-agents`         | `plugins/cloud-agents`         | The frontend plugin: the agents list, an agent's live timeline and questions, the new agent form, and the settings page for credentials and access tokens. |
-| `@alaborderie/plugin-cloud-agents-common`  | `plugins/cloud-agents-common`  | TypeScript types of the API and of the runner events.                                                                                                      |
+| Package                                    | Directory                      | What it is                                                                                                                                                                                            |
+| ------------------------------------------ | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@alaborderie/plugin-cloud-agents-backend` | `plugins/cloud-agents-backend` | The backend plugin: the API at `/api/cloud-agents`, the database tables, the Job launcher, and the log follower.                                                                                      |
+| `@alaborderie/plugin-cloud-agents`         | `plugins/cloud-agents`         | The frontend plugin, built on Backstage UI: the agents list, an agent's live timeline and questions, the new agent form, the settings page for credentials and access tokens, and a home page widget. |
+| `@alaborderie/plugin-cloud-agents-common`  | `plugins/cloud-agents-common`  | TypeScript types of the API and of the runner events.                                                                                                                                                 |
 
 [docs/API.md](docs/API.md) is the API contract, version 1.
 
@@ -48,7 +48,11 @@ These steps assume the new backend system and the new frontend system, as in a B
    import cloudAgentsPlugin from '@alaborderie/plugin-cloud-agents';
    ```
 
-   The plugin adds the page `/cloud-agents` and a nav item. On the legacy frontend system, mount `<CloudAgentsPage />` at `/cloud-agents` and add `legacyCloudAgentsPlugin` to the app's plugins.
+   The plugin adds the page `/cloud-agents`, a nav item, and the home page widget `home-page-widget:cloud-agents/cloud-agents`, which `@backstage/plugin-home` picks up when the app has it. `@alaborderie/plugin-cloud-agents/alpha` also exports the widget as `cloudAgentsHomeWidget`. On the legacy frontend system, mount `<CloudAgentsPage />` at `/cloud-agents` and add `legacyCloudAgentsPlugin` to the app's plugins.
+
+   The UI reads only Backstage UI (BUI) CSS variables, so it follows the app's theme. The app must load `@backstage/ui/css/styles.css`, as apps created from the current template do. Tertiary text reads `--ember-fg-tertiary` and falls back to `--bui-fg-secondary`.
+
+   Other pages can link to `/cloud-agents/new?repo=<owner>/<name>&issue=<number>&title=<issue title>`. The form opens with that repository, the title, and a prompt that points at the issue.
 
 4. Set the configuration below, create the namespace and the RBAC, and register the GitHub App callback.
 
@@ -262,6 +266,8 @@ You need Node 22 or 24, Corepack, Docker, [kind](https://kind.sigs.k8s.io/), and
    ```sh
    yarn start:frontend
    ```
+
+   Add `?mock` to any page, such as <http://localhost:3000/cloud-agents?mock>, to use invented agents and a scripted live run instead of the backend; `?mock=0` switches back. The dev app previews the Ember theme's BUI variables (`plugins/cloud-agents/dev/ember-preview.css`). To run on other ports, set `APP_CONFIG_app_baseUrl` and `APP_CONFIG_backend_baseUrl` for both processes, and `APP_CONFIG_backend_listen_port` and `APP_CONFIG_backend_cors_origin` for the backend.
 
 To call the API from a shell, get a Backstage token for the guest user, then create a `cat_` token with it:
 

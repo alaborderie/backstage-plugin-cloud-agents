@@ -1,0 +1,61 @@
+/*
+ * Dev only. A preview of the Ember theme's BUI variables (design proposal,
+ * section 6), so the dev app looks like the real one. The real theme ships in
+ * its own repository; the plugin itself reads only BUI variables.
+ */
+
+:root,
+[data-theme-mode] {
+  color-scheme: dark;
+  --bui-bg-app: #0f0e0e;
+  --bui-bg-neutral-1: #181616;
+  --bui-bg-neutral-2: #201d1d;
+  --bui-bg-neutral-3: #292525;
+  --bui-bg-neutral-4: #332e2e;
+  --bui-fg-primary: #f4efee;
+  --bui-fg-secondary: #b8afad;
+  --bui-fg-disabled: #6e6462;
+  --bui-border-1: rgba(255, 238, 232, 0.06);
+  --bui-border-2: rgba(255, 238, 232, 0.11);
+  --bui-ring: #ff6b57;
+  --bui-accent-bg: #d63e31;
+  --bui-accent-bg-hover: #c23628;
+  --bui-accent-fg: #ffffff;
+  /* BUI 0.19 buttons and toggle buttons still read the solid tokens. */
+  --bui-bg-solid: #d63e31;
+  --bui-bg-solid-hover: #c23628;
+  --bui-bg-solid-pressed: #c23628;
+  --bui-bg-solid-disabled: rgba(214, 62, 49, 0.45);
+  --bui-fg-solid: #ffffff;
+  --bui-fg-solid-disabled: rgba(255, 255, 255, 0.6);
+  --bui-fg-danger: #ff8fa3;
+  --bui-fg-positive: #5bd49a;
+  --bui-positive-bg-subdued: rgba(91, 212, 154, 0.12);
+  --bui-positive-border: rgba(91, 212, 154, 0.35);
+  --bui-fg-warning: #f2b65a;
+  --bui-warning-bg-subdued: rgba(242, 182, 90, 0.12);
+  --bui-warning-border: rgba(242, 182, 90, 0.35);
+  --bui-fg-negative: #ff8fa3;
+  --bui-negative-bg-subdued: rgba(255, 143, 163, 0.12);
+  --bui-negative-border: rgba(255, 143, 163, 0.3);
+  --bui-announcement-bg: #d63e31;
+  --bui-announcement-fg: #ffffff;
+  --bui-fg-announcement: #ff6b57;
+  --bui-announcement-bg-subdued: rgba(255, 107, 87, 0.12);
+  --bui-announcement-border: rgba(255, 107, 87, 0.38);
+  --ember-fg-tertiary: #958b89;
+  --bui-font-regular: 'Geist', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', Roboto, sans-serif;
+  --bui-font-monospace: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas,
+    monospace;
+  --bui-radius-1: 4px;
+  --bui-radius-2: 6px;
+  --bui-radius-3: 10px;
+  --bui-radius-4: 14px;
+  --bui-radius-5: 18px;
+  --bui-radius-6: 24px;
+}
+
+body {
+  background: var(--bui-bg-app);
+}

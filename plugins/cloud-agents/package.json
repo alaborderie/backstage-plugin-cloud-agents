@@ -24,7 +24,9 @@
       "@alaborderie/plugin-cloud-agents-common"
     ]
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "*.css"
+  ],
   "scripts": {
     "start": "backstage-cli package start --config dev/app-config.yaml",
     "build": "backstage-cli package build",
@@ -36,13 +38,13 @@
   },
   "dependencies": {
     "@alaborderie/plugin-cloud-agents-common": "workspace:^",
-    "@backstage/core-components": "^0.18.15",
     "@backstage/core-plugin-api": "^1.12.11",
     "@backstage/errors": "^1.3.2",
     "@backstage/frontend-plugin-api": "^0.18.2",
-    "@material-ui/core": "^4.12.2",
-    "@material-ui/icons": "^4.9.1",
-    "@material-ui/lab": "4.0.0-alpha.61"
+    "@backstage/plugin-home-react": "^0.1.43",
+    "@backstage/ui": "^0.19.0",
+    "@remixicon/react": "~4.8.0",
+    "react-aria-components": "~1.22.0"
   },
   "peerDependencies": {
     "react": "^16.13.1 || ^17.0.0 || ^18.0.0",
@@ -51,6 +53,7 @@
   },
   "devDependencies": {
     "@backstage/cli": "^0.36.7",
+    "@backstage/core-components": "^0.18.15",
     "@backstage/frontend-defaults": "^0.5.7",
     "@backstage/frontend-test-utils": "^0.6.5",
     "@backstage/plugin-app-react": "^0.2.8",
@@ -67,5 +70,20 @@
     "dist",
     "config.d.ts"
   ],
-  "configSchema": "config.d.ts"
+  "configSchema": "config.d.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./alpha": "./src/alpha.tsx",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "alpha": [
+        "src/alpha.tsx"
+      ],
+      "package.json": [
+        "package.json"
+      ]
+    }
+  }
 }

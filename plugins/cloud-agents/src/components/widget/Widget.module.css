@@ -1,0 +1,127 @@
+.root {
+  font-size: 14px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 12px 10px;
+  border-radius: var(--ca-r-md);
+  transition: background-color var(--ca-fast);
+}
+.agent:hover,
+.agent:focus-within {
+  background: var(--ca-s2);
+}
+.agent[data-needs] {
+  background: var(--ca-attn-soft);
+  box-shadow: inset 0 0 0 1px var(--ca-attn-line);
+  margin-bottom: 6px;
+}
+
+.glyph {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--ca-s2);
+  color: var(--ca-fg2);
+}
+.agent[data-needs] .glyph {
+  background: var(--ca-attn-soft);
+  color: var(--ca-attn-fg);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  display: block;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: var(--ca-r-sm);
+}
+.title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--ca-r-md);
+}
+
+.question {
+  margin: 8px 0 0;
+  color: var(--ca-fg1);
+  font-size: 13px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.side {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.skelRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 10px;
+}
+
+.state {
+  padding: 28px 12px;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 8px;
+  padding: 12px 10px 0;
+  border-top: 1px solid var(--ca-line1);
+  color: var(--ca-fg3);
+  font-size: 12px;
+}
+
+.links {
+  display: inline-flex;
+  gap: 16px;
+}
+.links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  color: var(--ca-fg2);
+  font-weight: 500;
+  border-radius: var(--ca-r-sm);
+}
+.links a:hover {
+  color: var(--ca-fg1);
+}
+@media (pointer: coarse) {
+  .links a {
+    min-height: 44px;
+  }
+}

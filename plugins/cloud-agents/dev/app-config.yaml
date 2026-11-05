@@ -1,7 +1,11 @@
 # Dev app for the cloud-agents frontend. Start the dev backend first
 # (`yarn start:backend`), then `yarn start:frontend`, and sign in as guest.
+# Open any page with `?mock` to use invented data instead of the backend.
 app:
   title: Cloud agents (dev)
   baseUrl: http://localhost:3000
+  extensions:
+    # Dark only, as the Ember theme ships.
+    - theme:app/light: false
 backend:
   baseUrl: http://localhost:7007

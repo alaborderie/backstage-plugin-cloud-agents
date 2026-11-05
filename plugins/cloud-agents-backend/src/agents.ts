@@ -340,6 +340,7 @@ export class AgentService {
       m: Mutation,
       lastRun: RunRow | undefined,
     ) => Promise<string | null | false>,
+    followUp?: string,
   ): Promise<void> {
     const runToken = randomToken(32);
     const started = await this.mutate(agentId, async m => {
@@ -365,6 +366,13 @@ export class AgentService {
       };
       await this.store.insertRun(m.tx, runRow);
       await this.store.updateAgent(m.tx, agentId, { stop_requested: false });
+      if (followUp !== undefined) {
+        await m.append(runRow.id, {
+          type: 'agent.message',
+          text: followUp,
+          ts: nowIso(),
+        });
+      }
       await m.append(runRow.id, {
         type: 'agent.run_started',
         runId: runRow.id,
@@ -569,12 +577,18 @@ export class AgentService {
       throw new ConflictError(`Agent ${id} has an active run`);
     }
     const credentials = await this.credentials.forRun(owner, agent.harness);
-    await this.startRun(id, 'message', credentials, async m => {
-      if (busy(m.agent.status)) {
-        throw new ConflictError(`Agent ${id} has an active run`);
-      }
-      return messageSection(m.agent.branch, text);
-    });
+    await this.startRun(
+      id,
+      'message',
+      credentials,
+      async m => {
+        if (busy(m.agent.status)) {
+          throw new ConflictError(`Agent ${id} has an active run`);
+        }
+        return messageSection(m.agent.branch, text);
+      },
+      text,
+    );
   }
 
   /**

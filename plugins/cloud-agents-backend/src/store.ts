@@ -1,13 +1,16 @@
 import type { Knex } from 'knex';
-import type {
-  Agent,
-  AgentParent,
-  AgentRun,
-  AgentStatus,
-  Harness,
-  OpenQuestion,
-  RunReason,
-  RunStatus,
+import {
+  summarizeToolInput,
+  type Agent,
+  type AgentActivity,
+  type AgentParent,
+  type AgentRun,
+  type AgentStatus,
+  type Harness,
+  type OpenQuestion,
+  type RunnerEvent,
+  type RunReason,
+  type RunStatus,
 } from '@alaborderie/plugin-cloud-agents-common';
 
 export interface AgentRow {
@@ -109,6 +112,37 @@ function toOpenQuestion(row: QuestionRow): OpenQuestion {
     question: row.question,
     options: options.map(o => o.label),
   };
+}
+
+const ACTIVITY_TYPES = ['tool.call', 'assistant.message'];
+const ACTIVITY_TEXT_MAX = 200;
+
+function oneLine(text: string): string {
+  const line = text.trim().split('\n')[0] ?? '';
+  return line.length > ACTIVITY_TEXT_MAX
+    ? `${line.slice(0, ACTIVITY_TEXT_MAX - 1)}…`
+    : line;
+}
+
+function toActivity(row: Pick<EventRow, 'data'>): AgentActivity | null {
+  const event = JSON.parse(row.data) as RunnerEvent;
+  if (event.type === 'tool.call') {
+    return {
+      type: 'tool.call',
+      name: event.name,
+      kind: event.kind,
+      summary: oneLine(summarizeToolInput(event.input)),
+      ts: event.ts,
+    };
+  }
+  if (event.type === 'assistant.message') {
+    return {
+      type: 'assistant.message',
+      text: oneLine(event.text),
+      ts: event.ts,
+    };
+  }
+  return null;
 }
 
 /** SQL for the plugin's tables. Each method is one statement or one read. */
@@ -239,6 +273,16 @@ export class Store {
       .limit(limit);
   }
 
+  /** The agent's latest tool call or assistant message. */
+  async lastActivity(agentId: string): Promise<AgentActivity | null> {
+    const row = await this.knex<EventRow>('events')
+      .where({ agent_id: agentId })
+      .whereIn('type', ACTIVITY_TYPES)
+      .orderBy('seq', 'desc')
+      .first('data');
+    return row ? toActivity(row) : null;
+  }
+
   /** The agent object of docs/API.md, with its runs and open questions. */
   async toAgent(row: AgentRow): Promise<Agent> {
     const runs = await this.listRuns(this.knex, row.id);
@@ -246,6 +290,7 @@ export class Store {
     const questions = lastRun
       ? await this.listQuestions(this.knex, lastRun.id)
       : [];
+    const activity = await this.lastActivity(row.id);
     return {
       id: row.id,
       title: row.title,
@@ -264,6 +309,7 @@ export class Store {
         .map(toOpenQuestion),
       prUrl: row.pr_url,
       parent: row.parent ? (JSON.parse(row.parent) as AgentParent) : null,
+      activity,
     };
   }
 
