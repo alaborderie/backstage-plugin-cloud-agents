@@ -11,8 +11,7 @@ import {
 import {
   RiAddLine,
   RiAlertLine,
-  RiExternalLinkLine,
-  RiGitPullRequestLine,
+  RiNodeTree,
   RiRefreshLine,
   RiRobot2Line,
   RiSearchLine,
@@ -24,12 +23,13 @@ import {
   duration,
   elapsed,
   isTyping,
-  prNumber,
+  plural,
   repoName,
 } from '../../format';
 import { tierOf, useAgents, useBasePath, useNow, useTiers } from '../../hooks';
 import {
   Kbd,
+  PrChip,
   STATUS_GLYPH,
   StateMessage,
   StatusPill,
@@ -38,6 +38,13 @@ import {
 } from '../ui';
 import { ActivityLine } from './ActivityLine';
 import styles from './List.module.css';
+
+/** A waiting hub is in progress too: it sleeps while its children work. */
+const isActive = (a: Agent) =>
+  a.status === 'running' || a.status === 'queued' || a.status === 'waiting';
+
+const byCreation = (a: Agent, b: Agent) =>
+  Date.parse(a.createdAt) - Date.parse(b.createdAt);
 
 interface Filter {
   id: string;
@@ -48,17 +55,11 @@ interface Filter {
 const FILTERS: readonly Filter[] = [
   { id: 'all', label: 'All', test: () => true },
   { id: 'needs', label: 'Needs you', test: a => a.status === 'needs_input' },
-  {
-    id: 'active',
-    label: 'Running',
-    test: a => a.status === 'running' || a.status === 'queued',
-  },
+  { id: 'active', label: 'Running', test: a => isActive(a) },
   { id: 'succeeded', label: 'Succeeded', test: a => a.status === 'succeeded' },
   { id: 'failed', label: 'Failed', test: a => a.status === 'failed' },
   { id: 'stopped', label: 'Stopped', test: a => a.status === 'stopped' },
 ];
-
-const isActive = (a: Agent) => a.status === 'running' || a.status === 'queued';
 
 function matches(agent: Agent, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -75,22 +76,6 @@ function TierLabel(props: { tier: TierInfo | undefined; harness: string }) {
       <Icon className={ui.iconXs} aria-hidden="true" />
       {props.tier?.name ?? props.harness}
     </span>
-  );
-}
-
-function PrChip(props: { url: string }) {
-  return (
-    <a
-      className={styles.prLink}
-      href={props.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`Pull request #${prNumber(props.url)}`}
-    >
-      <RiGitPullRequestLine className={ui.iconXs} aria-hidden="true" />#
-      {prNumber(props.url)}
-      <RiExternalLinkLine className={ui.iconXs} aria-hidden="true" />
-    </a>
   );
 }
 
@@ -125,6 +110,12 @@ function AgentRow(props: {
           <span>{repoName(agent.repo)}</span>
           <span className={ui.mono}>{agent.branch}</span>
           <TierLabel tier={tier} harness={agent.harness} />
+          {agent.kind === 'hub' && (
+            <span>
+              <RiNodeTree className={ui.iconXs} aria-hidden="true" />
+              Hub · {plural(agent.children.length, 'child', 'children')}
+            </span>
+          )}
           {agent.runs.length > 1 && <span>{agent.runs.length} runs</span>}
         </div>
         {running && agent.activity && (
@@ -240,8 +231,15 @@ export function AgentsList() {
   const active = FILTERS.find(f => f.id === filter) ?? FILTERS[0]!;
   const shown = all.filter(a => active.test(a) && matches(a, query));
   const needs = shown.filter(a => a.status === 'needs_input');
-  const inProgress = shown.filter(isActive);
-  const done = shown.filter(a => a.status !== 'needs_input' && !isActive(a));
+  const listed = shown.filter(a => a.status !== 'needs_input');
+  // Children nest under a hub that has a row. A hub asking a question has a
+  // card instead, and a hub the filters hide has nothing, so its children
+  // stay at the top level.
+  const hubs = new Set(listed.filter(a => a.kind === 'hub').map(a => a.id));
+  const nested = (a: Agent) => a.parentId !== null && hubs.has(a.parentId);
+  const top = listed.filter(a => !nested(a));
+  const inProgress = top.filter(isActive);
+  const done = top.filter(a => !isActive(a));
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -336,7 +334,7 @@ export function AgentsList() {
     );
   } else {
     let index = 0;
-    const row = (agent: Agent) => {
+    const agentRow = (agent: Agent) => {
       const i = index++;
       return (
         <AgentRow
@@ -346,6 +344,26 @@ export function AgentsList() {
           now={now}
           selected={i === selected}
         />
+      );
+    };
+    const row = (agent: Agent) => {
+      if (agent.kind !== 'hub') return agentRow(agent);
+      const children = shown
+        .filter(a => a.parentId === agent.id)
+        .sort(byCreation);
+      return (
+        <div key={agent.id} className={styles.hub}>
+          {agentRow(agent)}
+          {children.length > 0 && (
+            <div
+              role="group"
+              aria-label={`Children of ${agent.title}`}
+              className={styles.children}
+            >
+              {children.map(agentRow)}
+            </div>
+          )}
+        </div>
       );
     };
     body = (

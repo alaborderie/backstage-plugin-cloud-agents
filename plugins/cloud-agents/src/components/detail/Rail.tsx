@@ -173,7 +173,9 @@ export function Rail(props: {
 }) {
   return (
     <aside className={styles.rail} aria-label="Agent summary">
-      <PullRequestCard ref={props.prCardRef} agent={props.agent} />
+      {(props.agent.kind !== 'hub' || props.agent.prUrl) && (
+        <PullRequestCard ref={props.prCardRef} agent={props.agent} />
+      )}
       <UsageCard timeline={props.timeline} />
       <WorkspaceCard agent={props.agent} timeline={props.timeline} />
     </aside>

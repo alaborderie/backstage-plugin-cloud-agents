@@ -163,14 +163,17 @@ const hubRunTokenAuth = createServiceFactory({
     const mock = mockServices.httpAuth({ pluginId: plugin.getId() });
     const key = hubRunTokenKey(Buffer.from(ENCRYPTION_KEY, 'base64'));
     return {
-      ...mock,
+      issueUserCookie: (res, options) => mock.issueUserCookie(res, options),
       credentials: (async (req, options) => {
         const token = /^Bearer\s+(\S+)$/i.exec(
           req.headers.authorization ?? '',
         )?.[1];
         const runId = token ? verifyHubRunToken(key, token) : undefined;
         if (!runId) return mock.credentials(req, options);
-        if (options?.allow && !options.allow.includes('service')) {
+        if (
+          options?.allow &&
+          !(options.allow as string[]).includes('service')
+        ) {
           throw new NotAllowedError(
             `This endpoint does not allow 'service' credentials`,
           );

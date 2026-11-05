@@ -6,7 +6,12 @@ import type {
 } from '@alaborderie/plugin-cloud-agents-common';
 import type { CloudAgentsApi } from '../../api';
 import {
+  allAgents,
+  childAsking,
+  childDone,
   envelope,
+  hub,
+  hubFamily,
   iso,
   mockApi,
   needsYou,
@@ -97,6 +102,16 @@ const questionEvents = [
 
 const composer = () => screen.getByRole('form', { name: 'Answer the agent' });
 
+/** The API with the hub and its children next to the other agents. */
+const withHub = (streamEvents: Stream = sends([])) => {
+  const agents = [...allAgents, ...hubFamily];
+  return mockApi({
+    listAgents: jest.fn(async () => agents),
+    getAgent: jest.fn(async (id: string) => agents.find(a => a.id === id)!),
+    streamEvents: jest.fn(streamEvents),
+  });
+};
+
 describe('agent detail', () => {
   it('shows the live timeline, the pull request, and no Stop once done', async () => {
     const api = mockApi({
@@ -129,6 +144,117 @@ describe('agent detail', () => {
     expect(
       screen.getByRole('form', { name: 'Follow-up message' }),
     ).toBeInTheDocument();
+  });
+
+  it('lists a hub’s children with their status, questions, and pull requests, and why the hub woke', async () => {
+    const api = withHub(
+      sends([
+        envelope(1, 'run-10', {
+          type: 'agent.wake',
+          childId: childDone.id,
+          childStatus: 'succeeded',
+          ts: iso(NOW),
+        }),
+        envelope(2, 'run-11', {
+          type: 'agent.run_started',
+          runId: 'run-11',
+          reason: 'child',
+          ts: iso(NOW),
+        }),
+        envelope(3, 'run-11', {
+          type: 'agent.status',
+          status: 'waiting',
+          ts: iso(NOW),
+        }),
+      ]),
+    );
+    await renderRoot(api, `/cloud-agents/agents/${hub.id}`);
+
+    const children = await screen.findByRole('region', { name: /^Children/ });
+    const rows = within(children).getAllByRole('listitem');
+    expect(rows.map(row => within(row).getAllByRole('link')[0])).toEqual([
+      within(children).getByRole('link', { name: childDone.title }),
+      within(children).getByRole('link', { name: childAsking.title }),
+    ]);
+    expect(
+      within(rows[0]!).getByRole('link', { name: childDone.title }),
+    ).toHaveAttribute('href', `/cloud-agents/agents/${childDone.id}`);
+    expect(
+      within(rows[0]!).getByRole('link', { name: 'Pull request #88' }),
+    ).toHaveAttribute('href', 'https://github.com/acme/acme-api/pull/88');
+    expect(within(rows[0]!).getByText('Succeeded')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('1 open question')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('Needs you')).toBeInTheDocument();
+
+    expect(screen.getAllByText('Waiting on children').length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      screen.getByRole('form', { name: 'Follow-up message' }),
+    ).toBeInTheDocument();
+    const log = screen.getByRole('log', { name: 'Agent events' });
+    expect(
+      await within(log).findByText('Woken by a child'),
+    ).toBeInTheDocument();
+    expect(
+      within(log).getByRole('link', { name: childDone.title }),
+    ).toHaveAttribute('href', `/cloud-agents/agents/${childDone.id}`);
+    expect(
+      within(log).getByText(/^Run 1 · started by a child event/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(
+      await screen.findByText(/The hub and every child still working stop/),
+    ).toBeInTheDocument();
+  });
+
+  it('opens a child from its hub with the child’s own events', async () => {
+    const api = withHub(async (id, after, onEvent) => {
+      const text =
+        id === hub.id ? 'Splitting the objective.' : 'Adding the schema.';
+      [
+        envelope(1, 'run-1', {
+          type: 'assistant.message',
+          text,
+          parent_call_id: null,
+        }),
+      ]
+        .filter(e => e.seq > after)
+        .forEach(onEvent);
+    });
+    await renderRoot(api, `/cloud-agents/agents/${hub.id}`);
+    const children = await screen.findByRole('region', { name: /^Children/ });
+    expect(
+      await screen.findByText('Splitting the objective.'),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      within(children).getByRole('link', { name: childDone.title }),
+    );
+    expect(
+      await screen.findByRole('heading', { name: childDone.title }),
+    ).toBeInTheDocument();
+    const log = screen.getByRole('log', { name: 'Agent events' });
+    expect(
+      await within(log).findByText('Adding the schema.'),
+    ).toBeInTheDocument();
+    expect(
+      within(log).queryByText('Splitting the objective.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('links a child to its hub', async () => {
+    await renderRoot(withHub(), `/cloud-agents/agents/${childDone.id}`);
+    const crumbs = await screen.findByRole('navigation', {
+      name: 'Breadcrumb',
+    });
+    expect(
+      await within(crumbs).findByRole('link', { name: hub.title }),
+    ).toHaveAttribute('href', `/cloud-agents/agents/${hub.id}`);
+    expect(
+      screen.queryByRole('region', { name: /^Children/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('answers two questions one after the other', async () => {

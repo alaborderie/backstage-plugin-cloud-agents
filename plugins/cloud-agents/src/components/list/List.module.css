@@ -144,6 +144,51 @@
   gap: 2px;
 }
 
+.hub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.children {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 30px;
+}
+
+/*
+ * The trunk runs under the hub's glyph. Each child draws its branch; all but
+ * the last carry the trunk on to the next.
+ */
+.children > .row::before,
+.children > .row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  border-left: 1px solid var(--ca-line2);
+  pointer-events: none;
+}
+
+.children > .row::before {
+  top: -2px;
+  height: calc(50% + 2px);
+  width: 10px;
+  border-bottom: 1px solid var(--ca-line2);
+  border-bottom-left-radius: 6px;
+}
+
+.children > .row:first-child::before {
+  top: -14px;
+  height: calc(50% + 14px);
+}
+
+.children > .row:not(:last-child)::after {
+  top: 50%;
+  bottom: -2px;
+}
+
 .row {
   position: relative;
   display: grid;
@@ -240,24 +285,6 @@
   }
 }
 
-.prLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--ca-s2);
-  color: var(--ca-fg2);
-  font-size: 12px;
-  font-weight: 500;
-  transition: color var(--ca-fast), background-color var(--ca-fast);
-}
-
-.prLink:hover {
-  color: var(--ca-fg1);
-  background: var(--ca-s3);
-}
-
 .hints {
   display: flex;
   flex-wrap: wrap;
@@ -268,6 +295,12 @@
 }
 
 @media (max-width: 860px) {
+  .children {
+    margin-left: 24px;
+  }
+  .children > .row::before {
+    width: 4px;
+  }
   .row {
     grid-template-columns: 32px minmax(0, 1fr);
     padding: 12px 8px;

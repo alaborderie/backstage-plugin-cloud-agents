@@ -109,6 +109,95 @@
   background: var(--ca-attn-fg);
 }
 
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 8px;
+  color: var(--ca-fg3);
+}
+.crumbs > span {
+  margin-bottom: 14px;
+}
+
+.hubChildren {
+  padding: 16px 16px 8px;
+  margin-bottom: 24px;
+}
+.hubChildren h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ca-fg2);
+}
+.hubChildren > .railEmpty {
+  padding-bottom: 8px;
+}
+.hubCount {
+  color: var(--ca-fg3);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.childList {
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+.child {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 10px 8px;
+  border-radius: var(--ca-r-md);
+  transition: background-color var(--ca-fast);
+}
+.child + .child {
+  box-shadow: 0 -1px 0 var(--ca-line1);
+}
+.child:hover,
+.child:focus-within {
+  background: var(--ca-s2);
+}
+.childMain {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.childTitle {
+  display: block;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: var(--ca-r-sm);
+}
+.childTitle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--ca-r-md);
+}
+.childSide {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.childAsks {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ca-attn-fg);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .detail {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -277,6 +366,15 @@
 .evTitle b {
   color: var(--ca-fg1);
   font-weight: 500;
+}
+.evTitle .wakeLink {
+  color: var(--ca-fg1);
+  text-decoration: underline;
+  text-decoration-color: var(--ca-line2);
+  text-underline-offset: 3px;
+}
+.evTitle .wakeLink:hover {
+  text-decoration-color: currentColor;
 }
 .evTime {
   margin-left: auto;

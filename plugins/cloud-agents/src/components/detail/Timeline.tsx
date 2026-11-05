@@ -1,4 +1,5 @@
 import { useId, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import {
   RiAlertLine,
   RiArrowRightSLine,
@@ -13,6 +14,7 @@ import {
   RiGitBranchLine,
   RiGitPullRequestLine,
   RiInformationLine,
+  RiNodeTree,
   RiQuestionLine,
   RiSearchLine,
   RiStopCircleLine,
@@ -21,7 +23,14 @@ import {
 import { ButtonLink } from '@backstage/ui';
 import type { Agent, TierInfo } from '@alaborderie/plugin-cloud-agents-common';
 import { summarizeToolInput } from '@alaborderie/plugin-cloud-agents-common';
-import { clock, duration, prNumber, shortSha } from '../../format';
+import {
+  STATUS_LABEL,
+  clock,
+  duration,
+  prNumber,
+  shortSha,
+} from '../../format';
+import { useBasePath } from '../../hooks';
 import { KIND_ICON, tierIcon, ui, type Icon } from '../ui';
 import type { Item, SetupItem, ToolCall } from './timeline';
 import styles from './Detail.module.css';
@@ -183,6 +192,34 @@ function ToolRow(props: { item: Item; tool: ToolCall; ctx: TimelineContext }) {
   );
 }
 
+/** A hub woke up because one of its children changed status. */
+function WakeRow(props: {
+  item: Extract<Item, { kind: 'wake' }>;
+  ctx: TimelineContext;
+}) {
+  const { event } = props.item;
+  const base = useBasePath();
+  const child = props.ctx.agent.children.find(c => c.id === event.childId);
+  return (
+    <Row item={props.item} ctx={props.ctx} icon={RiNodeTree} dot="agent">
+      <div className={styles.evTitle}>
+        <b>Woken by a child</b>
+        <span>
+          <Link
+            className={styles.wakeLink}
+            to={`${base}/agents/${event.childId}`}
+          >
+            {child?.title ?? event.childId}
+          </Link>{' '}
+          ·{' '}
+          {(STATUS_LABEL[event.childStatus] ?? event.childStatus).toLowerCase()}
+        </span>
+        <Time ts={event.ts} />
+      </div>
+    </Row>
+  );
+}
+
 function exploredLabel(tools: ToolCall[]): string {
   const reads = tools.filter(t => t.call.kind === 'read').length;
   const searches = tools.length - reads;
@@ -219,6 +256,7 @@ const RUN_REASON: Record<string, string> = {
   initial: 'started from the prompt',
   reply: 'resumed with your answers',
   message: 'started by your follow-up',
+  child: 'started by a child event',
 };
 
 /** How each `run.finished.status` reads: title, glyph, and tone. */
@@ -308,6 +346,7 @@ const RENDER: Renderers = {
       <Prose className={styles.you} text={item.event.text} />
     </Row>
   ),
+  wake: ({ item, ctx }) => <WakeRow item={item} ctx={ctx} />,
   tool: ({ item, ctx }) => <ToolRow item={item} tool={item.tool} ctx={ctx} />,
   explored: ({ item, ctx }) => {
     const running = item.tools.some(t => !t.result);

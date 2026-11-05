@@ -27,11 +27,14 @@ import {
   RiGitBranchLine,
   RiGithubLine,
   RiKeyLine,
+  RiNodeTree,
   RiRecordCircleLine,
+  RiRobot2Line,
   RiSparkling2Line,
 } from '@remixicon/react';
 import {
   HARNESSES,
+  type AgentKind,
   type CreateAgentRequest,
   type CredentialsSummary,
   type Harness,
@@ -39,7 +42,7 @@ import {
 } from '@alaborderie/plugin-cloud-agents-common';
 import { CloudAgentsApiError, cloudAgentsApiRef } from '../../api';
 import { useAgents, useBasePath, useLoad, useTiers } from '../../hooks';
-import { InlineAlert, Kbd, tierIcon, ui } from '../ui';
+import { InlineAlert, Kbd, tierIcon, ui, type Icon } from '../ui';
 import styles from './NewAgent.module.css';
 
 const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
@@ -56,6 +59,43 @@ const HARNESS_LABEL: Record<Harness, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   opencode: 'OpenCode Go',
+};
+
+/** What each kind asks for and does, worded for the form. */
+const KIND: Record<
+  AgentKind,
+  {
+    name: string;
+    icon: Icon;
+    hint: string;
+    prompt: string;
+    description: string;
+    placeholder: string;
+    empty: string;
+  }
+> = {
+  task: {
+    name: 'Agent',
+    icon: RiRobot2Line,
+    hint: 'Does the work on one branch and opens a pull request.',
+    prompt: 'What should the agent do?',
+    description:
+      'The agent receives this brief verbatim, plus your skills. Blocking questions come back to you here.',
+    placeholder:
+      'Describe the change, the constraints, and how you will judge it done.',
+    empty: 'Write a prompt first.',
+  },
+  hub: {
+    name: 'Hub',
+    icon: RiNodeTree,
+    hint: 'Splits an objective into tasks, starts an agent for each, and finishes when they are all done.',
+    prompt: 'What is the hub’s objective?',
+    description:
+      'The hub splits it into tasks, starts one child agent per task, and follows them. Blocking questions come back to you here.',
+    placeholder:
+      'Describe the outcome, the constraints, and how you will judge it done.',
+    empty: 'Write the objective first.',
+  },
 };
 
 interface FromIssue {
@@ -102,6 +142,7 @@ Read the issue and its comments first. Open a pull request that closes #${
 }
 
 interface Form {
+  kind: AgentKind;
   prompt: string;
   repo: string;
   tier: string;
@@ -185,6 +226,7 @@ export function NewAgent() {
   );
   const [showIssue, setShowIssue] = useState(Boolean(issue));
   const [form, setForm] = useState<Form>(() => ({
+    kind: 'task',
     prompt: prefill.prompt,
     repo: prefill.repo,
     tier: tiers[0]?.name ?? '',
@@ -258,7 +300,7 @@ export function NewAgent() {
     }
     setRepoError(undefined);
     if (!form.prompt.trim()) {
-      setError(new Error('Write a prompt first.'));
+      setError(new Error(KIND[form.kind].empty));
       return;
     }
     if (form.custom && !form.model.trim()) {
@@ -267,6 +309,7 @@ export function NewAgent() {
       return;
     }
     const request: CreateAgentRequest = {
+      kind: form.kind,
       repo,
       base: form.base.trim() || 'main',
       prompt: form.prompt,
@@ -328,10 +371,32 @@ export function NewAgent() {
               />
             </div>
           )}
+          <RadioGroup
+            label="Kind"
+            orientation="horizontal"
+            value={form.kind}
+            onChange={value => set('kind', value as AgentKind)}
+            className={styles.kinds}
+          >
+            {(Object.keys(KIND) as AgentKind[]).map(kind => {
+              const { name, icon: KindIcon, hint } = KIND[kind];
+              return (
+                <Radio key={kind} value={kind} className={styles.tierCard}>
+                  <span className={styles.tTop}>
+                    <span className={styles.tGlyph}>
+                      <KindIcon className={ui.icon} aria-hidden="true" />
+                    </span>
+                    <b>{name}</b>
+                  </span>
+                  <span className={styles.desc}>{hint}</span>
+                </Radio>
+              );
+            })}
+          </RadioGroup>
           <TextAreaField
-            label="What should the agent do?"
-            description="The agent receives this brief verbatim, plus your skills. Blocking questions come back to you here."
-            placeholder="Describe the change, the constraints, and how you will judge it done."
+            label={KIND[form.kind].prompt}
+            description={KIND[form.kind].description}
+            placeholder={KIND[form.kind].placeholder}
             rows={8}
             value={form.prompt}
             onChange={value => set('prompt', value)}
@@ -507,7 +572,7 @@ export function NewAgent() {
             isPending={submitting}
             className={styles.start}
           >
-            Start agent
+            Start {KIND[form.kind].name.toLowerCase()}
           </Button>
           <div className={styles.hint}>
             <Kbd>⌘</Kbd> <Kbd>↵</Kbd> from anywhere in the form

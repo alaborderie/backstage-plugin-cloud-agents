@@ -9,6 +9,7 @@ import type {
   CredentialsSummary,
   PluginEvent,
   PutCredentialRequest,
+  RunReason,
   RunnerEvent,
 } from '@alaborderie/plugin-cloud-agents-common';
 import {
@@ -89,6 +90,8 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
 
   private add(
     partial: Pick<Agent, 'id' | 'title' | 'repo' | 'status'> & {
+      kind?: Agent['kind'];
+      parentId?: string;
       tier: string;
       createdMin: number;
       runs?: Array<{
@@ -113,6 +116,7 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
     const last = runs[runs.length - 1];
     const agent: Agent = {
       id: partial.id,
+      kind: partial.kind ?? 'task',
       title: partial.title,
       repo: partial.repo,
       base: 'main',
@@ -130,6 +134,8 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
       openQuestions: partial.openQuestions ?? [],
       prUrl: partial.prUrl ?? null,
       parent: partial.parent ?? null,
+      parentId: partial.parentId ?? null,
+      children: [],
       activity: null,
     };
     const mock: MockAgent = {
@@ -189,7 +195,7 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
     runIndex: number,
     start: number,
     existed: boolean,
-    reason: 'initial' | 'reply' | 'message',
+    reason: RunReason,
   ) {
     const run = mock.agent.runs[runIndex]!;
     const a = mock.agent;
@@ -310,6 +316,8 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
       error?: string;
       questions?: string[];
       cost?: number | null;
+      /** A hub's run ends with the hub waiting while its children work. */
+      agentStatus?: AgentStatus;
     } = {},
   ) {
     const exit = { succeeded: 0, failed: 1, needs_input: 3, cancelled: 130 }[
@@ -344,7 +352,7 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
       ts,
     );
     const agentStatus: AgentStatus =
-      status === 'cancelled' ? 'stopped' : status;
+      extra.agentStatus ?? (status === 'cancelled' ? 'stopped' : status);
     this.push(
       mock,
       { type: 'agent.status', status: agentStatus },
@@ -692,6 +700,8 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
         'The harness reported an error: usage limit reached for the five_hour window.',
     });
 
+    this.seedHub();
+
     const done = (
       id: string,
       title: string,
@@ -769,6 +779,148 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
       60 * 29.2,
       14,
     );
+  }
+
+  /** A hub on acme-api, waiting on one child that asks and one that is done. */
+  private seedHub() {
+    const hub = this.add({
+      id: 'ag_h8b3w1',
+      kind: 'hub',
+      title: 'Ship the v2 invoices API',
+      repo: `${OWNER}/acme-api`,
+      status: 'waiting',
+      tier: 'opus',
+      createdMin: 48,
+      runs: [
+        { status: 'succeeded', start: 48, end: 44, exit: 0 },
+        { status: 'succeeded', start: 17, end: 16, exit: 0 },
+      ],
+    });
+    const schema = this.add({
+      id: 'ag_c2r7p4',
+      parentId: hub.agent.id,
+      title: 'Add the v2 invoice schema and migration',
+      repo: `${OWNER}/acme-api`,
+      status: 'succeeded',
+      tier: 'sol',
+      createdMin: 45,
+      runs: [{ status: 'succeeded', start: 45, end: 17, exit: 0 }],
+      prUrl: `https://github.com/${OWNER}/acme-api/pull/88`,
+    });
+    const endpoints = this.add({
+      id: 'ag_c5k1z9',
+      parentId: hub.agent.id,
+      title: 'Serve GET /v2/invoices with cursor pagination',
+      repo: `${OWNER}/acme-api`,
+      status: 'needs_input',
+      tier: 'sol',
+      createdMin: 44.5,
+      runs: [{ status: 'needs_input', start: 44.5, end: 11, exit: 3 }],
+    });
+    const question = {
+      questionId: 'ask-1',
+      runId: `${endpoints.agent.id}-run-1`,
+      question: 'Should a cursor expire after 24 hours, or never?',
+      options: ['Expire after 24 hours', 'Never expire'],
+    };
+    endpoints.agent.openQuestions = [question];
+
+    const h1 = minutesAgo(48);
+    this.setup(hub, 0, h1, false, 'initial');
+    this.say(
+      hub,
+      0,
+      h1 + 20_000,
+      'Two independent tasks: the schema with its migration, then the endpoint on top of it. Starting one agent for each.',
+    );
+    this.tool(
+      hub,
+      0,
+      h1 + 120_000,
+      'shell',
+      'Bash',
+      { command: 'cloud-agents start --tier sol "Add the v2 invoice schema"' },
+      schema.agent.id,
+      false,
+      2_000,
+    );
+    this.tool(
+      hub,
+      0,
+      h1 + 150_000,
+      'shell',
+      'Bash',
+      { command: 'cloud-agents start --tier sol "Serve GET /v2/invoices"' },
+      endpoints.agent.id,
+      false,
+      2_000,
+    );
+    this.finish(hub, 0, minutesAgo(44), h1, 'succeeded', {
+      cost: 0.41,
+      agentStatus: 'waiting',
+    });
+    const h2 = minutesAgo(17);
+    this.push(
+      hub,
+      {
+        type: 'agent.wake',
+        childId: schema.agent.id,
+        childStatus: 'succeeded',
+      },
+      1,
+      h2 - 1_000,
+    );
+    this.setup(hub, 1, h2, true, 'child');
+    this.say(
+      hub,
+      1,
+      h2 + 20_000,
+      'The schema landed in pull request #88. The endpoint agent is still working, so I’m going back to sleep.',
+    );
+    this.finish(hub, 1, minutesAgo(16), h2, 'succeeded', {
+      cost: 0.18,
+      agentStatus: 'waiting',
+    });
+
+    const s1 = minutesAgo(45);
+    this.setup(schema, 0, s1, false, 'initial');
+    this.say(
+      schema,
+      0,
+      s1 + 20_000,
+      'Adding `invoices_v2` with a backfill migration.',
+    );
+    this.finish(schema, 0, minutesAgo(17), s1, 'succeeded', {
+      pr: schema.agent.prUrl,
+    });
+
+    const e1 = minutesAgo(44.5);
+    this.setup(endpoints, 0, e1, false, 'initial');
+    this.push(
+      endpoints,
+      {
+        type: 'question',
+        question_id: question.questionId,
+        question: question.question,
+        options: [
+          {
+            label: question.options[0],
+            description: 'Old cursors fail with 410 and clients restart.',
+          },
+          {
+            label: question.options[1],
+            description: 'Simpler for clients; cursors encode the sort key.',
+          },
+        ],
+        blocking: true,
+        source: 'ask_user',
+      },
+      0,
+      e1 + 90_000,
+    );
+    this.finish(endpoints, 0, minutesAgo(11), e1, 'needs_input', {
+      questions: [question.questionId],
+    });
   }
 
   /** The rest of the running agent's second run, streamed as it would be. */
@@ -918,11 +1070,7 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
     return mock;
   }
 
-  private startRun(
-    mock: MockAgent,
-    reason: 'initial' | 'reply' | 'message',
-    text?: string,
-  ) {
+  private startRun(mock: MockAgent, reason: RunReason, text?: string) {
     const a = mock.agent;
     const index = a.runs.length;
     a.runs.push({
@@ -942,7 +1090,8 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
       a.status = 'running';
       this.push(mock, { type: 'agent.status', status: 'running' }, index);
       await later(1_200);
-      const opening = {
+      const opening: Record<RunReason, string> = {
+        child: 'A child reported back. Checking where the objective stands.',
         reply: 'Thanks. Going with your answers.',
         message: 'On it. Reading the last commits first.',
         initial: `Reading the repository to plan “${a.title}”.`,
@@ -963,19 +1112,38 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
     })();
   }
 
+  /** The agent as the API returns it, with a hub's children summarized. */
+  private view(mock: MockAgent): Agent {
+    const agent = structuredClone(mock.agent);
+    agent.children = [...this.agents.values()]
+      .map(m => m.agent)
+      .filter(child => child.parentId === agent.id)
+      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+      .map(child => ({
+        id: child.id,
+        title: child.title,
+        status: child.status,
+        branch: child.branch,
+        prUrl: child.prUrl,
+        openQuestions: child.openQuestions.length,
+        updatedAt: child.updatedAt,
+      }));
+    return agent;
+  }
+
   /* ----- CloudAgentsApi ----- */
 
   async listAgents(status?: AgentStatus): Promise<Agent[]> {
     await later(250);
     return [...this.agents.values()]
-      .map(m => structuredClone(m.agent))
+      .map(m => this.view(m))
       .filter(a => !status || a.status === status)
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
 
   async getAgent(id: string): Promise<Agent> {
     await later(150);
-    return structuredClone(this.mock(id).agent);
+    return this.view(this.mock(id));
   }
 
   async createAgent(request: CreateAgentRequest): Promise<Agent> {
@@ -991,6 +1159,7 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
     const id = `ag_${Math.random().toString(36).slice(2, 8)}`;
     const mock = this.add({
       id,
+      kind: request.kind,
       title: request.title || request.prompt.split('\n')[0]!.slice(0, 80),
       repo: request.repo,
       status: 'queued',
@@ -998,7 +1167,7 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
       createdMin: 0,
     });
     this.startRun(mock, 'initial');
-    return structuredClone(mock.agent);
+    return this.view(mock);
   }
 
   async reply(id: string, questionId: string): Promise<void> {
@@ -1014,7 +1183,10 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
   async message(id: string, text: string): Promise<void> {
     await later(400);
     const mock = this.mock(id);
-    if (!isTerminalAgentStatus(mock.agent.status)) {
+    if (
+      mock.agent.status !== 'waiting' &&
+      !isTerminalAgentStatus(mock.agent.status)
+    ) {
       throw new CloudAgentsApiError(409, {
         error: {
           name: 'ConflictError',
@@ -1029,6 +1201,14 @@ export class MockCloudAgentsApi implements CloudAgentsApi {
     await later(500);
     const mock = this.mock(id);
     if (isTerminalAgentStatus(mock.agent.status)) return;
+    for (const child of this.agents.values()) {
+      if (child.agent.parentId === id) await this.stop(child.agent.id);
+    }
+    if (mock.agent.status === 'waiting') {
+      mock.agent.status = 'stopped';
+      this.push(mock, { type: 'agent.status', status: 'stopped' });
+      return;
+    }
     const index = mock.agent.runs.length - 1;
     const run = mock.agent.runs[index]!;
     run.status = 'stopped';

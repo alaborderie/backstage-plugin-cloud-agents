@@ -41,6 +41,7 @@ const ORDER: Partial<Record<Agent['status'], number>> = {
   needs_input: 0,
   running: 1,
   queued: 2,
+  waiting: 3,
 };
 
 function WidgetRow(props: {
@@ -232,8 +233,8 @@ function Body(props: { base: string }) {
 }
 
 /**
- * The home page widget: agents that need you, running and queued agents, and
- * what finished today.
+ * The home page widget: agents that need you, running and queued agents, hubs
+ * waiting on their children, and what finished today.
  */
 export function CloudAgentsWidget() {
   const base = useRouteRef(rootRouteRef)?.() ?? '/cloud-agents';

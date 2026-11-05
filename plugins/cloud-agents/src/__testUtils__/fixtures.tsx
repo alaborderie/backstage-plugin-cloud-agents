@@ -38,6 +38,7 @@ function run(
 
 function agent(overrides: Partial<Agent> & Pick<Agent, 'id' | 'title'>): Agent {
   return {
+    kind: 'task',
     repo: 'acme/acme-api',
     base: 'main',
     branch: `cloud-agent/${overrides.id.slice(3)}`,
@@ -51,6 +52,8 @@ function agent(overrides: Partial<Agent> & Pick<Agent, 'id' | 'title'>): Agent {
     openQuestions: [],
     prUrl: null,
     parent: null,
+    parentId: null,
+    children: [],
     activity: null,
     ...overrides,
   };
@@ -121,6 +124,57 @@ export const stopped = agent({
   updatedAt: iso(EARLIER),
   runs: [run('run-6', 'stopped', EARLIER - 600_000)],
 });
+
+const HUB_ID = 'ag_000000000010';
+
+export const childDone = agent({
+  id: 'ag_000000000011',
+  title: 'Add the v2 invoice schema',
+  parentId: HUB_ID,
+  createdAt: iso(NOW - 500_000),
+  runs: [run('run-11', 'succeeded', NOW - 500_000)],
+  prUrl: 'https://github.com/acme/acme-api/pull/88',
+});
+
+export const childAsking = agent({
+  id: 'ag_000000000012',
+  title: 'Serve the v2 invoices endpoint',
+  parentId: HUB_ID,
+  status: 'needs_input',
+  createdAt: iso(NOW - 450_000),
+  runs: [run('run-12', 'needs_input', NOW - 450_000)],
+  openQuestions: [
+    {
+      questionId: 'ask-1',
+      runId: 'run-12',
+      question: 'Should a cursor expire?',
+      options: ['After 24 hours', 'Never'],
+    },
+  ],
+});
+
+const summary = (child: Agent) => ({
+  id: child.id,
+  title: child.title,
+  status: child.status,
+  branch: child.branch,
+  prUrl: child.prUrl,
+  openQuestions: child.openQuestions.length,
+  updatedAt: child.updatedAt,
+});
+
+/** A hub waiting on two children, one done with a PR, one asking. */
+export const hub = agent({
+  id: HUB_ID,
+  kind: 'hub',
+  title: 'Ship the v2 invoices API',
+  status: 'waiting',
+  createdAt: iso(NOW - 550_000),
+  runs: [run('run-10', 'succeeded', NOW - 550_000)],
+  children: [summary(childDone), summary(childAsking)],
+});
+
+export const hubFamily = [hub, childAsking, childDone];
 
 export const allAgents = [
   succeeded,

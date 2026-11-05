@@ -53,6 +53,7 @@ export type Item =
   | SetupItem
   | (Base & { kind: 'message'; event: Ev<'assistant.message'> })
   | (Base & { kind: 'you'; event: Ev<'agent.message'> })
+  | (Base & { kind: 'wake'; event: Ev<'agent.wake'> })
   | (Base & { kind: 'tool'; tool: ToolCall })
   | (Base & { kind: 'explored'; tools: ToolCall[] })
   | QuestionItem
@@ -204,6 +205,8 @@ const FOLD: Fold = {
   'agent.run_started': (b, e, env) => b.runStartedBy(env, e),
   'agent.message': (b, e, env) =>
     b.push({ kind: 'you', key: `ev:${env.seq}`, seq: env.seq, event: e }),
+  'agent.wake': (b, e, env) =>
+    b.push({ kind: 'wake', key: `ev:${env.seq}`, seq: env.seq, event: e }),
   'agent.status': (b, e, env) => {
     if (e.error) {
       b.push({
