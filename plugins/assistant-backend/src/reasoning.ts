@@ -24,7 +24,10 @@ export class Reasoner {
     private readonly model: string,
   ) {}
 
-  private async keyOf(userEntityRef: string): Promise<string | null> {
+  private async keyOf(
+    userEntityRef: string,
+    signal: AbortSignal,
+  ): Promise<string | null> {
     const { token } = await this.deps.auth.getPluginRequestToken({
       onBehalfOf: await this.deps.auth.getOwnServiceCredentials(),
       targetPluginId: 'cloud-agents',
@@ -37,6 +40,7 @@ export class Reasoner {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ userEntityRef }),
+      signal,
     });
     if (!response.ok) {
       throw new Error(`cloud-agents answered ${response.status} for the key`);
@@ -48,30 +52,34 @@ export class Reasoner {
     userEntityRef: string,
     question: string,
     context: string | undefined,
+    signal: AbortSignal,
   ): Promise<ReasoningResult> {
-    const apiKey = await this.keyOf(userEntityRef);
+    const apiKey = await this.keyOf(userEntityRef, signal);
     if (!apiKey) {
       return { error: 'missing_anthropic_key', message: SETTINGS_HINT };
     }
     const client = new Anthropic({ apiKey });
     try {
-      const response = await client.beta.messages.create({
-        model: this.model,
-        max_tokens: 16000,
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'high' },
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        system: SYSTEM,
-        messages: [
-          {
-            role: 'user',
-            content: context
-              ? `${question}\n\n<context>\n${context}\n</context>`
-              : question,
-          },
-        ],
-      });
+      const response = await client.beta.messages.create(
+        {
+          model: this.model,
+          max_tokens: 16000,
+          thinking: { type: 'adaptive' },
+          output_config: { effort: 'high' },
+          betas: ['server-side-fallback-2026-07-01'],
+          fallbacks: 'default',
+          system: SYSTEM,
+          messages: [
+            {
+              role: 'user',
+              content: context
+                ? `${question}\n\n<context>\n${context}\n</context>`
+                : question,
+            },
+          ],
+        },
+        { signal },
+      );
       if (response.stop_reason === 'refusal') {
         return {
           error: 'refusal',

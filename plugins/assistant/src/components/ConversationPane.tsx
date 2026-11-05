@@ -67,7 +67,7 @@ export function ConversationPane(props: {
   const api = useApi(assistantApiRef);
   const navigate = useNavigate();
   const [view, setView] = useState<View>(() => viewOf(props.conversationId));
-  const [turn, setTurn] = useState<Turn>();
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [turnError, setTurnError] = useState<string>();
   const [draft, setDraft] = useState('');
   const shownId = useRef<string | undefined | null>(null);
@@ -110,7 +110,7 @@ export function ConversationPane(props: {
     const known = view.phase === 'ready' ? view.id : undefined;
     const controller = new AbortController();
     setTurnError(undefined);
-    setTurn({ conversationId: known, controller });
+    setTurns(all => [...all, { conversationId: known, controller }]);
     setDraft('');
     stick.current = true;
     let started = false;
@@ -120,7 +120,11 @@ export function ConversationPane(props: {
       target = created;
       shownId.current = created;
       setView({ phase: 'ready', id: created, items: [] });
-      setTurn({ conversationId: created, controller });
+      setTurns(all =>
+        all.map(t =>
+          t.controller === controller ? { ...t, conversationId: created } : t,
+        ),
+      );
       navigate(`${props.base}/${encodeURIComponent(created)}`);
       onChanged.current();
       return created;
@@ -148,7 +152,7 @@ export function ConversationPane(props: {
         if (!started) setDraft(text);
       }
     } finally {
-      setTurn(t => (t?.controller === controller ? undefined : t));
+      setTurns(all => all.filter(t => t.controller !== controller));
       onChanged.current();
     }
   };
@@ -182,7 +186,8 @@ export function ConversationPane(props: {
   };
 
   const shownConversation = view.phase === 'empty' ? undefined : view.id;
-  const busy = !!turn && turn.conversationId === shownConversation;
+  const turn = turns.find(t => t.conversationId === shownConversation);
+  const busy = !!turn;
   const items = view.phase === 'ready' ? view.items : [];
   const empty =
     view.phase === 'empty' ||

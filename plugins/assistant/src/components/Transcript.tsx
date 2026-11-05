@@ -78,6 +78,22 @@ function showsProgress(item: ConversationItem | undefined): boolean {
 }
 
 /** The conversation's items in seq order; consecutive tool calls group tightly. */
+const RESTARTING_TOOLS = new Set(['send_agent_message', 'reply_to_agent']);
+
+/**
+ * How many later tool calls started a new run of the agent. The card's key
+ * includes it, so a card that stopped following a finished agent follows again.
+ */
+function restarts(items: ConversationItem[], agentId: string): number {
+  return items.filter(
+    i =>
+      i.type === 'tool' &&
+      i.status === 'done' &&
+      RESTARTING_TOOLS.has(i.name) &&
+      (i.input as { id?: unknown } | null)?.id === agentId,
+  ).length;
+}
+
 export function Transcript(props: {
   conversationId: string;
   items: ConversationItem[];
@@ -130,7 +146,7 @@ export function Transcript(props: {
       case 'agent':
         blocks.push(
           <AgentCard
-            key={item.id}
+            key={`${item.id}-${restarts(items, item.agentId)}`}
             conversationId={props.conversationId}
             item={item}
             hasSummary={summarized.has(item.agentId)}

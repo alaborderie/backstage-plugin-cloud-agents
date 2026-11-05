@@ -455,7 +455,12 @@ export const TOOLS = {
         .describe('Facts, code, or data the question depends on'),
     }),
     async run({ question, context }, ctx, deps) {
-      return deps.reasoner.ask(ctx.userEntityRef, question, context);
+      return deps.reasoner.ask(
+        ctx.userEntityRef,
+        question,
+        context,
+        ctx.signal,
+      );
     },
   }),
 } satisfies Record<ToolName, ToolDef<z.ZodType>>;
