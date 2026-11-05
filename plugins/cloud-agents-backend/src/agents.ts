@@ -534,7 +534,16 @@ export class AgentService {
       created_at: now,
       updated_at: now,
     };
-    await this.store.insertAgent(this.store.knex, row);
+    if (parentId) {
+      await this.mutate(parentId, async m => {
+        if (m.agent.stop_requested || isTerminalAgentStatus(m.agent.status)) {
+          throw new NotAllowedError(`Hub ${parentId} is stopping`);
+        }
+        await this.store.insertAgent(m.tx, row);
+      });
+    } else {
+      await this.store.insertAgent(this.store.knex, row);
+    }
     await this.startRun(row.id, 'initial', credentials, async () => ({}));
     return this.getAgent(owner, id);
   }
@@ -913,8 +922,25 @@ export class AgentService {
     await this.stopAgent(await this.ownedAgentRow(owner, id), opts.byHub);
   }
 
+  /**
+   * Decides the stop under the agent's lock, as `startRun` does, so a run
+   * that starts at the same moment is either seen and deleted or not started.
+   * A hub is marked first, so it creates no child while its children stop.
+   */
   private async stopAgent(agent: AgentRow, byHub: boolean): Promise<void> {
-    if (isTerminalAgentStatus(agent.status)) return;
+    const run = await this.mutate(agent.id, async m => {
+      if (isTerminalAgentStatus(m.agent.status)) return undefined;
+      const runs = await this.store.listRuns(m.tx, agent.id);
+      const last = runs[runs.length - 1];
+      m.agent.stop_by_hub = byHub;
+      await this.store.updateAgent(m.tx, agent.id, {
+        stop_requested: true,
+        stop_by_hub: byHub,
+      });
+      if (last?.status === 'running') return last;
+      await m.setStatus(last?.id ?? '', 'stopped');
+      return undefined;
+    });
     if (agent.kind === 'hub') {
       for (const child of await this.store.listChildRows(
         this.store.knex,
@@ -923,34 +949,20 @@ export class AgentService {
         await this.stopAgent(child, true);
       }
     }
-    const id = agent.id;
-    const run = await this.lastRun(id);
-    if (run?.status === 'running') {
-      await this.store.updateAgent(this.store.knex, id, {
-        stop_requested: true,
-        stop_by_hub: byHub,
+    if (!run) return;
+    try {
+      await this.cluster.deleteJob(run.job_name);
+    } catch (error) {
+      if (!(error instanceof KubernetesRefusal)) throw error;
+      await this.finishRun(run.id, {
+        status: 'failed',
+        exitCode: null,
+        prUrl: null,
+        error: error.message,
       });
-      try {
-        await this.cluster.deleteJob(run.job_name);
-      } catch (error) {
-        if (!(error instanceof KubernetesRefusal)) throw error;
-        await this.finishRun(run.id, {
-          status: 'failed',
-          exitCode: null,
-          prUrl: null,
-          error: error.message,
-        });
-      }
-      return;
     }
-    await this.mutate(id, async m => {
-      if (!isTerminalAgentStatus(m.agent.status)) {
-        m.agent.stop_by_hub = byHub;
-        await this.store.updateAgent(m.tx, id, { stop_by_hub: byHub });
-        await m.setStatus(run?.id ?? '', 'stopped');
-      }
-    });
   }
+
 
   /**
    * Sends the stored events after `after`, then live ones, in seq order. Ends
