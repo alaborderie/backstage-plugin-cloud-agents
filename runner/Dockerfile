@@ -8,11 +8,32 @@ ARG OPENCODE_SHA256=09f44302c10fd036912f59c81fd1aef5df45dd06f649197f9dfc9bbe2a79
 ARG GH_VERSION=2.103.3
 ARG GH_SHA256=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
 ARG PNPM_VERSION=12.16.1
+ARG RUSTUP_VERSION=1.29.3
+ARG RUSTUP_SHA256=b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55
+ARG RUST_VERSION=1.99.1
+ARG PLAYWRIGHT_VERSION=1.64.1
 ARG CLOUD_AGENT_VERSION=0.1.0-local
 
+# Pods run without privilege escalation, so agents cannot apt-get or sudo: every build tool must be here.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git jq python3 ripgrep procps tini \
+      build-essential pkg-config libssl-dev python3-dev python3-pip python3-venv \
  && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 10001 --shell /bin/bash agent \
+ && install -d -o agent -g agent /workspace /opt/claude-plugins
+
+# Rust lives outside HOME and belongs to agent, so agents can add targets, components, and `cargo install`.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl -fsSL -o /tmp/rustup-init "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" \
+ && echo "${RUSTUP_SHA256}  /tmp/rustup-init" | sha256sum -c - \
+ && chmod 0755 /tmp/rustup-init \
+ && /tmp/rustup-init -y --no-modify-path --profile minimal --default-toolchain "${RUST_VERSION}" --component rustfmt,clippy \
+ && rm /tmp/rustup-init \
+ && chown -R agent:agent "$RUSTUP_HOME" "$CARGO_HOME" \
+ && echo 'export PATH="/usr/local/cargo/bin:$PATH"' > /etc/profile.d/cargo.sh
 
 RUN curl -fsSL -o /tmp/gh.tgz "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
  && echo "${GH_SHA256}  /tmp/gh.tgz" | sha256sum -c - \
@@ -30,8 +51,17 @@ RUN npm install -g --no-fund --no-audit \
       "pnpm@${PNPM_VERSION}" \
  && npm cache clean --force
 
-RUN useradd --create-home --uid 10001 --shell /bin/bash agent \
- && install -d -o agent -g agent /workspace /opt/claude-plugins
+# Node and Python Playwright at the same version share one Chromium build. Agents own the browser
+# directory, so a project pinned to another Playwright version can download its own browser there.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    NODE_PATH=/usr/local/lib/node_modules \
+    PIP_BREAK_SYSTEM_PACKAGES=1
+RUN npm install -g --no-fund --no-audit "playwright@${PLAYWRIGHT_VERSION}" \
+ && playwright install --with-deps chromium \
+ && pip3 install --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" \
+ && chown -R agent:agent "$PLAYWRIGHT_BROWSERS_PATH" \
+ && npm cache clean --force \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=agent:agent package.json /opt/cloud-agent/
 COPY --chown=agent:agent bin /opt/cloud-agent/bin

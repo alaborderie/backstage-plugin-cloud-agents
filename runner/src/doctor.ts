@@ -120,7 +120,7 @@ export async function doctor(skills: string[], install: boolean, env: NodeJS.Pro
   }
   const tools = Object.fromEntries(
     await Promise.all(
-      (['git', 'gh', 'node', 'python3'] as const).map(async (bin) => {
+      (['git', 'gh', 'node', 'python3', 'cc', 'rustc', 'cargo', 'playwright'] as const).map(async (bin) => {
         const r = await runProc(bin, ['--version'], { env: plain });
         return [bin, r.code === 0 ? r.stdout.trim().split('\n')[0] ?? null : null] as const;
       }),

@@ -122,9 +122,13 @@ These steps only partly work:
 | OpenCode | 2.2.5 | GitHub release `opencode-linux-x64.tar.gz`, SHA-256 checked |
 | GitHub CLI | 2.103.3 | GitHub release, SHA-256 checked |
 | pnpm | 12.16.1 | npm |
-| git, python3, jq, ripgrep, curl, tini | Debian bookworm | apt |
+| Rust (with `rustfmt`, `clippy`) | 1.99.1 | rustup 1.29.3, SHA-256 checked |
+| Playwright with Chromium | 1.64.1 | npm `playwright` and PyPI `playwright`, sharing `/ms-playwright` |
+| git, python3 (with pip, venv), gcc, g++, make, pkg-config, libssl-dev, jq, ripgrep, curl, tini | Debian bookworm | apt |
 
-The image runs as the non-root user `agent` (uid 10001) with `HOME=/home/agent`. It is built for `linux/amd64` only. To update a CLI, change its `ARG` in the [Dockerfile](Dockerfile) (and the SHA-256 for a GitHub release), then rerun `doctor` and a real run for that harness.
+Pods run without privilege escalation, so an agent cannot install system packages. It can still add Rust targets and crates, `pip install` (to its user site or a venv), and download another Playwright browser, because the agent user owns `CARGO_HOME`, `RUSTUP_HOME`, and `PLAYWRIGHT_BROWSERS_PATH`. [`scripts/check-toolchain.sh`](scripts/check-toolchain.sh) builds C, C++, and Rust and drives Chromium from Node and Python; CI runs it on every image.
+
+The image runs as the non-root user `agent` (uid 10001) with `HOME=/home/agent`. It is built for `linux/amd64` only. To update a CLI, change its `ARG` in the [Dockerfile](Dockerfile) (and the SHA-256 for a GitHub release), then rerun `doctor`, `check-toolchain.sh`, and a real run for that harness.
 
 ## Develop
 
