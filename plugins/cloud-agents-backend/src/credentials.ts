@@ -5,6 +5,7 @@ import type {
   CredentialName,
   CredentialsSummary,
   Harness,
+  ReasoningCredential,
 } from '@alaborderie/plugin-cloud-agents-common';
 import type { CredentialCipher } from './crypto';
 import type { GithubClient, GithubTokens } from './github';
@@ -153,17 +154,35 @@ export class CredentialService {
   async putAnthropicKey(owner: string, key: string): Promise<void> {
     if (key.startsWith('sk-ant-oat')) {
       throw new InputError(
-        'This is a Claude Code token, not an API key. Create an API key at console.anthropic.com.',
+        'This is a Claude Code token, not an API key. Save it as the Claude Code credential, which the assistant uses first.',
       );
     }
     await this.write(owner, 'anthropic', key, {});
   }
 
-  /** The user's Anthropic API key, for the assistant plugin's backend only. */
-  async anthropicKey(owner: string): Promise<string | null> {
-    const row = await this.store.getCredential(owner, 'anthropic');
-    return row
-      ? this.cipher.open(row.sealed, this.aad(owner, 'anthropic'))
+  /**
+   * The user's Claude Code token, else their Anthropic API key, for the
+   * assistant plugin's backend only.
+   */
+  async reasoningCredential(
+    owner: string,
+  ): Promise<ReasoningCredential | null> {
+    const claude = await this.store.getCredential(owner, 'claude');
+    if (claude) {
+      return {
+        kind: 'claude_code',
+        oauthToken: this.cipher.open(claude.sealed, this.aad(owner, 'claude')),
+      };
+    }
+    const anthropic = await this.store.getCredential(owner, 'anthropic');
+    return anthropic
+      ? {
+          kind: 'api_key',
+          apiKey: this.cipher.open(
+            anthropic.sealed,
+            this.aad(owner, 'anthropic'),
+          ),
+        }
       : null;
   }
 

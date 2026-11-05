@@ -86,7 +86,7 @@ export const assistantPlugin = createBackendPlugin({
                 DefaultGithubCredentialsProvider.fromIntegrations(integrations),
             },
             reasoner: new Reasoner(
-              { discovery, auth },
+              { discovery, auth, logger },
               settings.reasoningModel,
             ),
           },

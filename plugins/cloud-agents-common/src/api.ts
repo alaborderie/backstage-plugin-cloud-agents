@@ -188,10 +188,19 @@ export interface MessageRequest {
 
 /**
  * The credentials a user can store. `github` also has a web flow. `anthropic`
- * is an Anthropic API key for the assistant plugin's reasoning tool; no run
- * uses it.
+ * is an Anthropic API key that the assistant plugin's reasoning tool uses only
+ * when the user has no `claude` credential; no run uses it.
  */
 export type CredentialName = Harness | 'github' | 'anthropic';
+
+/**
+ * What the assistant's reasoning tool calls Claude with, from
+ * `POST /service/reasoning-credential`. A `claude_code` token is a Claude
+ * subscription token, so only the Claude Code CLI may use it.
+ */
+export type ReasoningCredential =
+  | { kind: 'claude_code'; oauthToken: string }
+  | { kind: 'api_key'; apiKey: string };
 
 export type CodexCredentialKind = 'api_key' | 'auth_json';
 
