@@ -117,7 +117,7 @@ These steps only partly work:
 
 | Component | Version | Source |
 | --- | --- | --- |
-| Base image | `node:24.22.2-bookworm-slim`, pinned by digest | Docker Hub |
+| Base image | `node:24.22.3-bookworm-slim`, pinned by digest | Docker Hub |
 | Claude Code | 2.1.318 | npm `@anthropic-ai/claude-code` |
 | Codex CLI | 0.166.0 | npm `@openai/codex` |
 | OpenCode | 2.2.5 | GitHub release `opencode-linux-x64.tar.gz`, SHA-256 checked |
