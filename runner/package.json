@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Runs one coding agent headless and streams normalized JSONL events.",
   "bin": { "cloud-agent": "bin/cloud-agent" },
-  "engines": { "node": ">=24" },
+  "engines": { "node": ">=24.22.3" },
   "packageManager": "pnpm@12.16.1",
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -32,7 +32,7 @@ jobs:
           package_json_file: runner/package.json
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 24.22.3
           cache: pnpm
           cache-dependency-path: runner/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
